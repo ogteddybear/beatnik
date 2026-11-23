@@ -32,7 +32,7 @@ function getDurationString(seconds: number | null) {
 }
 
 const baseEmbed = () =>
-  new EmbedBuilder().setColor("#F6921E").setTimestamp().setFooter({ text: "sent by Beatnik" });
+  new EmbedBuilder().setColor("#0a203b").setTimestamp().setFooter({ text: "sent by Sashimi" });
 
 export function getNowPlayingEmbed(
   track: QueuedTrack,
@@ -42,7 +42,7 @@ export function getNowPlayingEmbed(
 ) {
   return baseEmbed()
     .setAuthor({
-      name: `Now playing on Beatnik`,
+      name: `Now playing on Sashimi`,
     })
     .setTitle(track.title)
     .setThumbnail(track.thumbnailUrl ?? "")
@@ -77,7 +77,7 @@ export function getQueueListEmbed(
   const fieldText =
     trackStrings.length > 0 ? trackStrings.join("\n\n") : "Nothing is after this track.";
   return baseEmbed()
-    .setAuthor({ name: "Current queue for Beatnik" })
+    .setAuthor({ name: "Current queue for Sashimi" })
     .addFields({
       name: `(Page ${pageNumber} of ${totalPages})`,
       value: fieldText,
