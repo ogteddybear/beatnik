@@ -3,6 +3,7 @@ primary_region = "sin"
 
 [build]
   dockerfile = "Dockerfile"
+  target = "prod"
 
 [env]
   NODE_ENV = "production"
