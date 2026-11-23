@@ -1,0 +1,21 @@
+app = "ogteddybear-beatnik"
+primary_region = "sin"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  DATABASE_URL = "/data/library.db"
+  LIBRARY_PATH = "/data/library"
+
+[[mounts]]
+  source = "beatnik_data"
+  destination = "/data"
+  initial_size = "20gb"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
+  cpus = 1
+  cpu_kind = "shared"
