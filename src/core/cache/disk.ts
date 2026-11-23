@@ -1,7 +1,7 @@
 import type { Provider, ProviderPlaylist, ProviderTrack } from "@/providers";
 import { log } from "@/shared";
 import { createReadStream, createWriteStream, existsSync } from "node:fs";
-import { readdir, rename, rm } from "node:fs/promises";
+import { mkdir, readdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import type { Readable } from "node:stream";
 import { finished } from "node:stream/promises";
@@ -10,6 +10,10 @@ import { config } from "../config";
 
 const libDir = config.libraryPath;
 
+async function ensureLibraryDirectory() {
+  await mkdir(libDir, { recursive: true });
+}
+
 function getItemPath(id: string) {
   const itemPath = path.join(libDir, id + ".cache");
   const exists = existsSync(itemPath);
@@ -17,6 +21,7 @@ function getItemPath(id: string) {
 }
 
 export async function migrateCacheNames() {
+  await ensureLibraryDirectory();
   const files = await readdir(libDir);
   const opusFiles = files.filter((f) => f.endsWith(".opus"));
   const renamePromises = opusFiles.map((f) => {
@@ -29,6 +34,7 @@ export async function migrateCacheNames() {
 }
 
 export async function countCacheFiles() {
+  await ensureLibraryDirectory();
   const files = await readdir(libDir);
   const cacheFiles = files.filter((f) => f.endsWith(".cache"));
   return cacheFiles.length;
@@ -37,16 +43,17 @@ export async function countCacheFiles() {
 export async function downloadToCache(id: string, stream: Readable) {
   // download stream to cache dir
   try {
+    await ensureLibraryDirectory();
     const targetPath = getItemPath(id);
     if (targetPath.exists) {
       return false;
     }
-    log({ component: "CORE", name: "CACHE", message: `Downloading ${id}...` });
+    log({ component: "CORE", name: "CACHE", message: "Downloading " + id + "..." });
 
     const diskStream = createWriteStream(targetPath.path);
     await finished(stream.pipe(diskStream));
 
-    log({ component: "CORE", name: "CACHE", message: `Finished downloading ${id}` });
+    log({ component: "CORE", name: "CACHE", message: "Finished downloading " + id });
     return true;
   } catch (err) {
     console.error(err);
@@ -59,7 +66,7 @@ export async function removeDownload(id: string) {
   if (!targetPath.exists) {
     return;
   }
-  log({ component: "CORE", name: "CACHE", message: `Deleting ${id} from disk.` });
+  log({ component: "CORE", name: "CACHE", message: "Deleting " + id + " from disk." });
 
   return rm(targetPath.path);
 }
@@ -87,7 +94,7 @@ export async function downloadPlaylist(
         log({
           component: "CORE",
           name: "CACHE",
-          message: `Failed to download ${track.id}`,
+          message: "Failed to download " + track.id,
           level: "ERROR",
         });
         console.error(err);
@@ -106,7 +113,7 @@ export function getDownloadedIdStream(id: string) {
     log({
       component: "CORE",
       name: "CACHE",
-      message: `Unable to locate ${id} in cache.`,
+      message: "Unable to locate " + id + " in cache.",
     });
     return undefined;
   }
