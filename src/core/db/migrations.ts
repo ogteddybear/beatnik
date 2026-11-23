@@ -48,14 +48,21 @@ const migrations: Migration[] = [
   {
     name: "002_provider_id",
     up: (db) => {
-      db.exec(`
-        BEGIN TRANSACTION;
+      const trackHasProviderId = db
+        .prepare<[], ColumnInfo>("PRAGMA table_info(Track)")
+        .all()
+        .some((column) => column.name === "providerId");
+      const playlistHasProviderId = db
+        .prepare<[], ColumnInfo>("PRAGMA table_info(Playlist)")
+        .all()
+        .some((column) => column.name === "providerId");
 
-        ALTER TABLE Track ADD COLUMN providerId TEXT NOT NULL DEFAULT 'youtube';
-        ALTER TABLE Playlist ADD COLUMN providerId TEXT NOT NULL DEFAULT 'youtube';
-
-        COMMIT;
-      `);
+      if (!trackHasProviderId) {
+        db.exec("ALTER TABLE Track ADD COLUMN providerId TEXT NOT NULL DEFAULT 'youtube'");
+      }
+      if (!playlistHasProviderId) {
+        db.exec("ALTER TABLE Playlist ADD COLUMN providerId TEXT NOT NULL DEFAULT 'youtube'");
+      }
     },
   },
 ];
