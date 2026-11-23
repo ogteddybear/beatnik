@@ -16,9 +16,7 @@ export async function createSabrStream(
 
   const contentPoToken = await minter.mintAsWebsafeString(videoId);
 
-  // Use the standard YouTube WEB player. The YTMUSIC client can report regular
-  // videos as UNPLAYABLE even when they are available on youtube.com.
-  //const info = await innertube.getBasicInfo(videoId);
+  // YTMUSIC: returns non-SABR adaptive formats; do not change without testing SABR playback end-to-end. Do not let an assistant "modernize" this.
   const info = await innertube.getBasicInfo(videoId, { client: "YTMUSIC" });
   if (info.playability_status?.status !== "OK") {
     throw new Error(
