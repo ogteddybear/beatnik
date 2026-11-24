@@ -1,5 +1,10 @@
 import type { Provider } from "@/providers";
-import { MockProvider, SpotifyLinkResolver, YoutubeProvider } from "@/providers";
+import {
+  MockProvider,
+  SoundCloudProvider,
+  SpotifyLinkResolver,
+  YoutubeProvider,
+} from "@/providers";
 import { log } from "@/shared";
 
 import { config } from "./config";
@@ -19,6 +24,7 @@ export async function initProviders() {
   const youtubeProvider = await YoutubeProvider.create(config.youtube);
   const spotifyLinkResolver = SpotifyLinkResolver.createIfConfigured(youtubeProvider);
   if (spotifyLinkResolver) providers.push(spotifyLinkResolver);
+  providers.push(new SoundCloudProvider());
   providers.push(youtubeProvider);
   if (config.useMockProvider) {
     providers.unshift(new MockProvider());
