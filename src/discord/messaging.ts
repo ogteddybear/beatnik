@@ -87,11 +87,11 @@ export function getQueueListEmbed(
 export function getAddedToQueueMessage(
   tracksAddedToQueue: QueuedTrack[],
   isPlaying: boolean,
-  isEnd: boolean,
+  playNext: boolean,
   isShuffle: boolean,
 ) {
   const count = tracksAddedToQueue.length;
-  const location = isEnd ? "end" : "start";
+  const location = playNext ? "next in the queue" : "at the end of the queue";
   const action = isShuffle ? "Shuffled" : "Added";
   const startPlaying = !isPlaying ? "Starting playback!" : "";
   const trackInfo =
@@ -99,7 +99,7 @@ export function getAddedToQueueMessage(
       ? `${bold(tracksAddedToQueue[0].title)}`
       : `${count} track${count !== 1 ? "s" : ""}`;
 
-  return `${action} ${trackInfo} at the ${location} of the queue. ${startPlaying}`;
+  return `${action} ${trackInfo} ${location}. ${startPlaying}`;
 }
 function ephemeral(content: string): InteractionReplyOptions {
   return { content, flags: MessageFlags.Ephemeral };

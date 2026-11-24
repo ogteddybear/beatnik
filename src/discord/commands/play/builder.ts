@@ -8,8 +8,8 @@ export const builder = new SlashCommandBuilder()
   )
   .addBooleanOption((option) =>
     option
-      .setName("end")
-      .setDescription("Add to the end of the queue, instead of next.")
+      .setName("next")
+      .setDescription("Play this track next, instead of adding it to the end of the queue.")
       .setRequired(false),
   )
   .addBooleanOption((option) =>

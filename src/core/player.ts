@@ -24,7 +24,7 @@ export class CorePlayer {
     query: string,
     userId: string,
     willShuffle = false,
-    addToEnd = false,
+    playNext = false,
   ): Promise<QueuedTrack[]> {
     const { metadata, type } = await resolveQuery(query);
     let tracks: ProviderTrack[] = [];
@@ -34,7 +34,8 @@ export class CorePlayer {
       tracks = [metadata];
     }
     if (willShuffle) tracks = shuffleArray(tracks);
-    const basis = addToEnd ? this.queue.tracks.length : this.queue.currentIndex + 1;
+    // Explicit playNext inserts after the current track; otherwise preserve FIFO by appending.
+    const basis = playNext ? this.queue.currentIndex + 1 : this.queue.tracks.length;
     return tracks.map((t, idx) => {
       const queuedTrack = { ...t, addedBy: userId };
       this.queue.insert(queuedTrack, basis + idx);

@@ -34,7 +34,7 @@ export const execute: CommandExecuter = async (interaction) => {
   await interaction.deferReply();
 
   const subcommand = interaction.options.getSubcommand();
-  const isEnd = interaction.options.getBoolean("end") ?? false;
+  const playNext = interaction.options.getBoolean("next") ?? false;
   let isShuffle = interaction.options.getBoolean("shuffle") ?? false;
 
   const queryUrls: string[] = [];
@@ -68,5 +68,5 @@ export const execute: CommandExecuter = async (interaction) => {
     queryUrls.push(track.url);
   }
 
-  await enqueueAndPlay(interaction, queryUrls, { shuffle: isShuffle, end: isEnd });
+  await enqueueAndPlay(interaction, queryUrls, { shuffle: isShuffle, playNext });
 };

@@ -7,7 +7,7 @@ import type { ChatInputCommandInteraction } from "discord.js";
 export async function enqueueAndPlay(
   interaction: ChatInputCommandInteraction,
   queries: string[],
-  options: { shuffle?: boolean; end?: boolean } = {},
+  options: { shuffle?: boolean; playNext?: boolean } = {},
 ) {
   const guildId = interaction.guildId;
   if (!guildId) return;
@@ -15,14 +15,14 @@ export async function enqueueAndPlay(
   const voiceChannel = await requireVoiceChannel(interaction);
   if (!voiceChannel) return;
 
-  const { shuffle = false, end = false } = options;
+  const { shuffle = false, playNext = false } = options;
   const { player } = getOrCreateSession(guildId);
   getOrCreateVoiceSession(voiceChannel, interaction.channel, player);
 
   const allTracksQueued = [];
 
   for (const query of queries) {
-    const tracks = await player.enqueue(query, interaction.user.id, shuffle, end);
+    const tracks = await player.enqueue(query, interaction.user.id, shuffle, playNext);
     allTracksQueued.push(...tracks);
   }
 
@@ -32,7 +32,7 @@ export async function enqueueAndPlay(
 
   // interaction is already deferred
   await interaction.editReply({
-    content: getAddedToQueueMessage(allTracksQueued, player.isPlaying, end, shuffle),
+    content: getAddedToQueueMessage(allTracksQueued, player.isPlaying, playNext, shuffle),
   });
 
   if (!player.isPlaying) {

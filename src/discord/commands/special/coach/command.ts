@@ -37,7 +37,7 @@ export const execute: CommandExecuter = async (interaction) => {
     if (playlist?.url) queryUrls.push(playlist.url);
   });
 
-  await enqueueAndPlay(interaction, queryUrls, { shuffle: true, end: false });
+  await enqueueAndPlay(interaction, queryUrls, { shuffle: true, playNext: false });
 
   await interaction.editReply({
     content: `Updated, queued, and shuffled all playlists. Enjoy the tunes, Coach!`,

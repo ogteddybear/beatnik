@@ -6,6 +6,6 @@ export const execute: CommandExecuter = async (interaction) => {
   const query = interaction.options.getString("query", true);
   await enqueueAndPlay(interaction, [query], {
     shuffle: interaction.options.getBoolean("shuffle") ?? false,
-    end: interaction.options.getBoolean("end") ?? false,
+    playNext: interaction.options.getBoolean("next") ?? false,
   });
 };
