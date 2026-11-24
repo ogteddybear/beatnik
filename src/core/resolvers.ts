@@ -41,10 +41,10 @@ async function resolvePlaylistMetadata(
   // prefer database metadata, then provider method
   const dbPlaylist = playlists.getTracks(id);
   if (dbPlaylist) {
-    const tracksWithProviderId: ProviderTrack[] = dbPlaylist.tracks.map((t) => ({
-      ...t,
-      providerId: provider.id,
-    }));
+    const tracksWithProviderId: ProviderTrack[] = dbPlaylist.tracks.map((track) => {
+      if (track.providerId !== provider.id) return track;
+      return { ...track, providerId: provider.id };
+    });
     return { ...dbPlaylist, tracks: tracksWithProviderId };
   }
   return provider.getPlaylist(id);
