@@ -4,7 +4,12 @@ import type { Readable } from "node:stream";
 
 import type { Queue, QueuedTrack } from "./queue";
 import { shuffleArray } from "./queue";
-import { resolveQuery, resolveStream, resolveTrackLoudness } from "./resolvers";
+import {
+  isUnplayableYouTubeStreamError,
+  resolveQuery,
+  resolveStream,
+  resolveTrackLoudness,
+} from "./resolvers";
 
 export class CorePlayer {
   constructor(
@@ -15,7 +20,7 @@ export class CorePlayer {
   isPlaying = false;
   fromCache: boolean | null = null;
 
-  onStream?: (track: ProviderTrack, stream: Readable) => void;
+  onStream?: (track: ProviderTrack, stream: Readable) => void | Promise<void>;
   onQueueEnd?: () => void;
   onStop?: () => void;
   onError?: (track: ProviderTrack, err: Error) => void;
@@ -58,10 +63,25 @@ export class CorePlayer {
       const loudness = await resolveTrackLoudness(track, provider);
       const trackWithLoudness = { ...track, loudness };
 
-      const { stream, fromCache } = await resolveStream(track.id, provider);
+      let streamResult: Awaited<ReturnType<typeof resolveStream>>;
+      try {
+        streamResult = await resolveStream(track.id, provider);
+      } catch (err) {
+        if (!isUnplayableYouTubeStreamError(err, provider)) throw err;
+        log({
+          level: "WARN",
+          component: "CORE",
+          name: "PLAYER",
+          message: `Skipping unplayable track ${track.providerId}:${track.id}: ${err}`,
+        });
+        this.isPlaying = false;
+        await this.next();
+        return;
+      }
+      const { stream, fromCache } = streamResult;
       this.isPlaying = true;
       this.fromCache = fromCache;
-      this.onStream?.(trackWithLoudness, stream);
+      await this.onStream?.(trackWithLoudness, stream);
       log({
         component: "CORE",
         name: "PLAYER",

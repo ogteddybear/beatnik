@@ -60,9 +60,24 @@ export async function resolveStream(id: string, provider: Provider): Promise<Str
     const stream = await provider.getStream(id);
     return { stream, fromCache: false };
   } catch (err) {
+    if (isUnplayableYouTubeStreamError(err, provider)) throw err;
     log({ level: "ERROR", message: `${err}`, component: "CORE", name: "PLAYER" });
     throw new Error(`${err}`);
   }
+}
+
+export function isUnplayableYouTubeStreamError(err: unknown, provider: Provider): boolean {
+  if (provider.id !== "youtube") return false;
+  const message = err instanceof Error ? err.message : String(err);
+  if (!message.includes("No compatible streams found")) return false;
+
+  return (
+    message.includes("UNPLAYABLE") ||
+    message.includes("Video unavailable") ||
+    message.includes("This video is unavailable") ||
+    message.includes("Private video") ||
+    message.includes("removed by the uploader")
+  );
 }
 
 export async function resolveTrackLoudness(
