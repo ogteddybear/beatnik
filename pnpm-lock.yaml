@@ -41,6 +41,9 @@ importers:
       jsdom:
         specifier: ^26.1.0
         version: 26.1.0(bufferutil@4.2.0)
+      spotdl-api:
+        specifier: ^1.0.0
+        version: 1.0.0
       youtubei.js:
         specifier: ^18.3.0
         version: 18.3.0
@@ -1928,6 +1931,9 @@ packages:
   source-map@0.5.7:
     resolution: {integrity: sha512-LbrmJOMUSdEVxIKvdcJzQC+nQhe8FUZQTXQy6+I75skNgn3OoQ0DZA8YnFa7gp8tqtL3KPf1kmo0R5DoApeSGQ==}
     engines: {node: '>=0.10.0'}
+
+  spotdl-api@1.0.0:
+    resolution: {integrity: sha512-HP1lQRIW5HrNknsPk/FdoBxB5Va/440ObLV0FH3TaxeYncwxO//l084af6+raYg0a8fSIQ7U2CXi96+t4Utjvw==}
 
   string-width@4.2.3:
     resolution: {integrity: sha512-wKyQRQpjJ0sIp62ErSZdGsjMJWsap5oRNihHhu6G7JVO/9jIB6UyevL+tXuOqrng8j/cxKTWyWUwvSTriiZz/g==}
@@ -3972,6 +3978,8 @@ snapshots:
   smol-toml@1.9.1: {}
 
   source-map@0.5.7: {}
+
+  spotdl-api@1.0.0: {}
 
   string-width@4.2.3:
     dependencies:

@@ -1,5 +1,6 @@
 import { log } from "@/shared";
 import type { Readable } from "node:stream";
+import { SpotDl } from "spotdl-api";
 
 import type { Provider, ProviderPlaylist, ProviderTrack, ResolvedQuery } from "../provider";
 import type { YoutubeProvider } from "../youtube";
@@ -24,30 +25,6 @@ interface SpotifyTrack {
   duration_ms: number;
   type: string;
   artists: SpotifyArtist[];
-}
-
-interface SpotifyPage<T> {
-  items: T[];
-  next: string | null;
-}
-
-interface SpotifyAlbum {
-  id: string;
-  name: string;
-  external_urls: { spotify: string };
-  artists: SpotifyArtist[];
-  tracks: SpotifyPage<SpotifyTrack>;
-}
-
-interface SpotifyPlaylist {
-  id: string;
-  name: string;
-  external_urls: { spotify: string };
-  owner: { display_name: string | null };
-}
-
-interface SpotifyPlaylistItem {
-  item: SpotifyTrack | null;
 }
 
 interface SpotifyTokenResponse {
@@ -107,6 +84,10 @@ function createClientCredentialsTokenProvider(
 
 export class SpotifyLinkResolver implements Provider {
   readonly id = PROVIDER_ID;
+  private readonly spotdl = new SpotDl(undefined, {
+    clientId: process.env.SPOTIFY_CLIENT_ID,
+    clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+  });
 
   private constructor(
     private readonly youtubeProvider: YoutubeProvider,
@@ -194,12 +175,48 @@ export class SpotifyLinkResolver implements Provider {
     if (!match) return null;
 
     const [, kind, id] = match;
+    const controller = new AbortController();
+    const timeoutError = new Error("Spotify playlist resolution timed out after 15s");
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      if (kind === "album") return await this.getAlbum(id);
-      return await this.getSpotifyPlaylist(id);
+      const url = `https://open.spotify.com/${kind}/${id}`;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(timeoutError);
+        }, 15_000);
+      });
+      const songs = await Promise.race([
+        this.spotdl.save(url, { args: ["--use-official-api"], signal: controller.signal }),
+        timeoutPromise,
+      ]);
+      const spotifyTracks: SpotifyTrack[] = songs.map((song) => ({
+        id: song.song_id,
+        name: song.name,
+        artists: song.artists.map((name) => ({ name })),
+        duration_ms: song.duration * 1_000,
+        type: "track",
+      }));
+
+      return {
+        providerId: this.id,
+        id,
+        url,
+        title:
+          (kind === "album" ? songs[0]?.album_name : songs[0]?.list_name) ??
+          `Spotify ${kind} ${id}`,
+        authorName: kind === "album" ? (songs[0]?.album_artist ?? "Unknown") : "Unknown",
+        tracks: await this.mapSpotifyTracks(spotifyTracks),
+      };
     } catch (error) {
+      if (error === timeoutError) {
+        log({ component: "PROVIDER", name: this.id, level: "WARN", message: timeoutError.message });
+        return null;
+      }
       this.logError(`Could not resolve Spotify ${kind} ${id}`, error);
       return null;
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
 
@@ -207,55 +224,6 @@ export class SpotifyLinkResolver implements Provider {
     throw new Error(
       "SpotifyLinkResolver does not stream audio; resolved tracks must use the YouTube provider",
     );
-  }
-
-  private async getAlbum(id: string): Promise<ProviderPlaylist> {
-    const album = await this.spotifyRequest<SpotifyAlbum>(
-      `albums/${id}?market=${encodeURIComponent(this.market)}`,
-    );
-    const spotifyTracks = await this.collectPages(album.tracks);
-
-    return {
-      providerId: this.id,
-      id: album.id,
-      url: album.external_urls.spotify,
-      title: album.name,
-      authorName: album.artists.map((artist) => artist.name).join(", ") || "Unknown",
-      tracks: await this.mapSpotifyTracks(spotifyTracks),
-    };
-  }
-
-  private async getSpotifyPlaylist(id: string): Promise<ProviderPlaylist> {
-    const market = encodeURIComponent(this.market);
-    const playlist = await this.spotifyRequest<SpotifyPlaylist>(`playlists/${id}?market=${market}`);
-    const firstPage = await this.spotifyRequest<SpotifyPage<SpotifyPlaylistItem>>(
-      `playlists/${id}/items?market=${market}`,
-    );
-    const playlistItems = await this.collectPages(firstPage);
-    const spotifyTracks = playlistItems
-      .map(({ item }) => item)
-      .filter((item): item is SpotifyTrack => item?.type === "track" && Boolean(item.id));
-
-    return {
-      providerId: this.id,
-      id: playlist.id,
-      url: playlist.external_urls.spotify,
-      title: playlist.name,
-      authorName: playlist.owner.display_name ?? "Unknown",
-      tracks: await this.mapSpotifyTracks(spotifyTracks),
-    };
-  }
-
-  private async collectPages<T>(firstPage: SpotifyPage<T>): Promise<T[]> {
-    const items = [...firstPage.items];
-    let next = firstPage.next;
-
-    while (next) {
-      const page: SpotifyPage<T> = await this.spotifyRequest<SpotifyPage<T>>(next);
-      items.push(...page.items);
-      next = page.next;
-    }
-    return items;
   }
 
   private async mapSpotifyTracks(tracks: SpotifyTrack[]): Promise<ProviderTrack[]> {
