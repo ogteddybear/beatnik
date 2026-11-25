@@ -1,7 +1,13 @@
 import { guildStorageSummary, storagePercentage } from "@/core/cache/storage";
-import { MB } from "@/core/db/guild-settings";
 import type { CommandExecuter } from "@/discord/commands";
 import { EmbedBuilder } from "discord.js";
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), sizes.length - 1);
+  return `${(bytes / 1024 ** index).toFixed(1)} ${sizes[index]}`;
+}
 
 export function storageEmbed(used: number, max: number): EmbedBuilder {
   const percentage = storagePercentage(used, max);
@@ -14,11 +20,8 @@ export function storageEmbed(used: number, max: number): EmbedBuilder {
     .setTitle(`${warning ? "⚠️ " : ""}Server storage`)
     .setColor(used > max ? 0xdc3545 : percentage > 90 ? 0xffc107 : 0x0d6efd)
     .setDescription(
-      `\`${bar}\` ${Math.round(percentage)}% (${(used / MB).toFixed(1)} MB / ${(max / MB).toFixed(1)} MB)`,
-    )
-    .setFooter({
-      text: "Guild cache only. Shared audio is excluded. A 0 MB quota disables new cache writes; streaming still works.",
-    });
+      `\`${bar}\` **${Math.round(percentage)}%** used\n\n**${formatBytes(used)}** of **${formatBytes(max)}**`,
+    );
 }
 
 export const execute: CommandExecuter = async (interaction) => {

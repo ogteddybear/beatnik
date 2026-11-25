@@ -94,8 +94,12 @@ test("guild quotas bound unknown-size and concurrent writes and preserve streami
     shared.destroy();
     assert.equal(
       storageEmbed(60 * 1048576, 100 * 1048576).toJSON().description,
-      "`[██████░░░░]` 60% (60.0 MB / 100.0 MB)",
+      "`[██████░░░░]` **60%** used\n\n**60.0 MB** of **100.0 MB**",
     );
+    const readable = storageEmbed(113.5 * 1048576, 4096 * 1048576).toJSON();
+    assert.match(readable.description ?? "", /\*\*113\.5 MB\*\* of \*\*4\.0 GB\*\*/);
+    assert.equal(readable.footer, undefined);
+    assert.match(storageEmbed(0, 0).toJSON().description ?? "", /\*\*0 B\*\* of \*\*0 B\*\*/);
     assert.equal(storageEmbed(95, 100).toJSON().color, 0xffc107);
     assert.equal(storageEmbed(101, 100).toJSON().color, 0xdc3545);
     assert.match(storageEmbed(1000, 100).toJSON().description ?? "", /\[██████████\].*1000%/);
