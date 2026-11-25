@@ -66,7 +66,7 @@ function formatBytes(bytes: number): string {
 }
 
 export function createWebServer(client: Client) {
-  const clientID = requiredEnv("DISCORD_CLIENT_ID");
+  const clientID = process.env.DISCORD_CLIENT_ID || config.discord.clientId;
   const clientSecret = requiredEnv("DISCORD_CLIENT_SECRET");
   const callbackURL = requiredEnv("DISCORD_REDIRECT_URI");
   const secret = requiredEnv("SESSION_SECRET");

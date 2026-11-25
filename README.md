@@ -56,7 +56,7 @@ Change `/path/on/your/computer` to a directory where Sashimi's files can live, s
 | `TOKEN`  | Discord developer portal > Applications > [your app] > Bot > Token  |
 | `CLIENT_ID` | Discord developer portal > Applications > [your app] > OAuth2 > Client ID  |
 | `PLAYER_ID` | (Optional) Player ID override. Can be used to work around temporary issues when YouTube introduces breaking changes by forcing an older player. |
-| `DISCORD_CLIENT_ID` | Discord OAuth2 application Client ID (usually the same value as `CLIENT_ID`). |
+| `DISCORD_CLIENT_ID` | (Optional) Discord OAuth2 application Client ID; defaults to the bot's `CLIENT_ID`. |
 | `DISCORD_CLIENT_SECRET` | Discord OAuth2 application Client Secret. Keep private. |
 | `DISCORD_REDIRECT_URI` | Discord OAuth2 redirect URL; for Fly, `https://dis.sashimi.zip/auth/callback`. Register this URL in the Discord developer portal. |
 | `SESSION_SECRET` | A long, random secret used to sign dashboard session cookies. Keep private. |
