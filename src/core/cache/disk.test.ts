@@ -66,6 +66,9 @@ test("migrate flat caches to global and keep guild downloads isolated", async ()
       "old cache",
     );
   } finally {
+    const { db, archiveDb } = await import("../db/client");
+    db.close();
+    archiveDb.close();
     await rm(directory, { recursive: true, force: true });
   }
 });

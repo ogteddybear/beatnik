@@ -59,6 +59,11 @@ const tableInit = `
     last_active_at  INTEGER
   );
 
+  CREATE TABLE IF NOT EXISTS GuildSettings (
+    guild_id TEXT PRIMARY KEY,
+    max_storage_bytes INTEGER NOT NULL DEFAULT 104857600 CHECK (max_storage_bytes >= 0)
+  );
+
   CREATE TABLE IF NOT EXISTS GuildTrackMap (
     guild_id           TEXT,
     track_id           TEXT,

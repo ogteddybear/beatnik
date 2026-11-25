@@ -60,6 +60,34 @@ Change `/path/on/your/computer` to a directory where Sashimi's files can live, s
 | `DISCORD_CLIENT_SECRET` | Discord OAuth2 application Client Secret. Keep private. |
 | `DISCORD_REDIRECT_URI` | Discord OAuth2 redirect URL; for Fly, `https://dis.sashimi.zip/auth/callback`. Register this URL in the Discord developer portal. |
 | `SESSION_SECRET` | A long, random secret used to sign dashboard session cookies. Keep private. |
+| `FLY_API_TOKEN` | Required for Fly platform metrics in the owner Infrastructure Health panel. Supply a read-scoped token with access to the organization's Prometheus endpoint. Keep this server-only, preferably as a Fly secret; never put it in client JavaScript or HTML. |
+| `FLY_ORG_SLUG` | Required for Fly platform metrics. Organization slug used by `https://api.fly.io/prometheus/<org-slug>/api/v1/query`; configure as a Fly secret alongside the token. |
+
+Generate the read-only dashboard metrics token with:
+
+```sh
+fly tokens create readonly --name "sashimi-dashboard-metrics" --expiry 8760h
+```
+
+Store the output securely as `FLY_API_TOKEN`; do not commit or share it.
+Raw Macaroon tokens beginning with `fm2_` are sent with the `FlyV1` authorization
+scheme. Values already beginning with `FlyV1 ` are used unchanged. Other token
+formats retain legacy `Bearer` authentication.
+
+Infrastructure Health is visible only to owner `258189484053495809` on `/admin`.
+It displays process RSS and uptime, 1/5/15-minute OS load averages, and a rough
+CPU load percentage (1-minute load divided by CPU core count, not actual CPU
+utilization). CPU load is unavailable on Windows, where Node reports zero load averages.
+Fly queries retrieve machine memory and the `beatnik_data` volume's total/free
+space. Requests run concurrently with three-second timeouts; platform results
+are cached for 15 seconds, and the visible admin page refreshes every 15 seconds.
+Missing credentials, failed queries, empty results, or ambiguous machine series
+do not prevent startup or dashboard loading. Individual metrics show
+“Unavailable”; process RAM still shows RSS when its platform limit is unavailable.
+Where available, Node's `fs.statfs('/data')` provides a clearly labeled local
+filesystem fallback for volume capacity (which can differ from provisioned size).
+The token, organization slug, request headers, and raw API responses are never
+sent to the browser.
 
 For bot installation to return to Sashimi, register
 `https://dis.sashimi.zip/invite/callback` under **Discord Developer Portal →
@@ -109,8 +137,17 @@ include archived events. Existing 90-day maximum query windows still apply.
 Cache files downloaded from guild library commands are stored in
 `LIBRARY_PATH/<guildId>/<trackId>.cache`. On startup, flat `.cache` and `.opus`
 files are moved to `LIBRARY_PATH/global/` and remain playable as a fallback.
-The dashboard sums only `.cache` files in each guild's own directory;
-shared legacy files in `global/` are not attributed to any guild.
+Storage usage sums regular files directly in each guild's own directory (including
+in-flight downloads); shared legacy files in `global/` are not attributed to any guild.
+Each guild defaults to a 100 MB cache quota (1 MB = 1,048,576 bytes).
+`/storage` shows usage, a ten-block progress bar, and the configured limit.
+The owner can change quotas on the guild analytics page. A zero quota disables
+new cache writes; lowering a quota never deletes existing files. Unknown-size
+streams are checked chunk by chunk, and rejected or failed downloads leave no
+partial audio cache. Concurrent cache writes are serialized per guild.
+Quota rejections log `library/quota_exceeded`; uncached playback continues through
+the normal provider streaming path. The owner settings API requires JSON and
+`X-Sashimi-Request: quota` for cross-site request protection.
 Dashboard sessions are stored in `LIBRARY_PATH/sessions.db` (on Fly's `/data` volume),
 so sessions persist across deploys. `connect-sqlite3` requires the separate `sqlite3`
 runtime driver; it does not use Sashimi's `better-sqlite3` database connection.

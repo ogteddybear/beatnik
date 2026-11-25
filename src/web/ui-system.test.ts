@@ -23,7 +23,8 @@ for (const view of ["login", "dashboard", "admin", "guild-detail", "invite-resul
     assert(window.document.querySelector('link[href="/static/dashboard.css"]'));
     assert(window.document.querySelector('meta[name="viewport"]'));
     assert(window.document.querySelector("h1"));
-    assert.equal(window.document.querySelector("[style]"), null);
+    // Dynamic Bootstrap progress widths/heights are the only inline styles.
+    assert.equal(window.document.querySelector("[style]:not(.progress):not(.progress-bar)"), null);
     if (["dashboard", "admin", "guild-detail"].includes(view)) {
       assert(window.document.querySelector('nav[aria-label="Main navigation"]'));
     }
@@ -58,13 +59,13 @@ test("activity has intentional empty, error, and validation feedback", async () 
     assert(range);
     range.value = "custom";
     window.document
-      .querySelector("form")
+      .querySelector("#activity-filters")
       ?.dispatchEvent(new window.Event("submit", { cancelable: true }));
     assert.equal(window.document.getElementById("live-status")?.dataset.state, "warning");
     range.value = "7";
     failed = true;
     window.document
-      .querySelector("form")
+      .querySelector("#activity-filters")
       ?.dispatchEvent(new window.Event("submit", { cancelable: true }));
     await flush();
     assert.equal(window.document.getElementById("live-status")?.dataset.state, "error");

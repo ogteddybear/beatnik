@@ -88,8 +88,12 @@ export async function addTrackToLibrary(
   try {
     const stream = await provider.getStream(track.id);
     if (
-      !(await downloadToCache(guildId, track.id, stream, () =>
-        recordDownload(guildId, actor)(track),
+      !(await downloadToCache(
+        guildId,
+        track.id,
+        stream,
+        () => recordDownload(guildId, actor)(track),
+        { ...actor, trackName: track.title },
       ))
     ) {
       return { added: false, completed: 0, errors: 1 };
@@ -140,6 +144,7 @@ export async function addPlaylistToLibrary(
     provider,
     onProgress,
     recordDownload(guildId, actor),
+    actor,
   );
   return {
     added: !playlistExists,

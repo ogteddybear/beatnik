@@ -13,6 +13,9 @@ for (const mode of ["admin", "regular"]) {
       plays: 1,
       requests: 2,
       storageUsed: "12 B",
+      storageLimit: "100 MB",
+      storagePercentage: 60,
+      storageOverQuota: false,
       skips: 0,
       stops: 0,
       commands: 3,
@@ -54,6 +57,7 @@ for (const mode of ["admin", "regular"]) {
       assert(icon, "guild icon must render after AJAX refresh");
       assert.equal(icon.src, guild.iconUrl);
       assert.equal(card, initialCard);
+      assert.equal(card.querySelector<HTMLElement>(".progress-bar")?.style.width, "60%");
       assert.equal(icon, initialIcon);
       assert.match(
         document.querySelector('[data-guild-id="456"] .guild-placeholder')?.textContent || "",
@@ -65,12 +69,20 @@ for (const mode of ["admin", "regular"]) {
         assert.equal(document.querySelector('[data-guild-id="123"]'), card);
         assert.equal(card.querySelector("img"), icon);
       }
-      guilds = [{ ...guild, plays: 9, name: "Renamed" }];
+      guilds = [
+        { ...guild, plays: 9, name: "Renamed", storagePercentage: 150, storageOverQuota: true },
+      ];
       tick();
       await flush();
       assert.equal(document.querySelector('[data-guild-id="456"]'), null);
       assert.match(card.textContent || "", /Renamed/);
       assert.equal(card.querySelector('[data-stat="plays"]')?.textContent, "9");
+      assert.equal(card.querySelector<HTMLElement>(".progress-bar")?.style.width, "100%");
+      assert(card.querySelector(".progress-bar.bg-danger"));
+      assert.match(
+        card.querySelector("[data-storage-progress]")?.getAttribute("aria-valuetext") ?? "",
+        /150%/,
+      );
       guilds = [{ ...guild, iconUrl: "https://cdn.discordapp.com/icons/123/new.png" }];
       tick();
       await flush();

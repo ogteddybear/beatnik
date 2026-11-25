@@ -21,6 +21,18 @@
         </div>
         <p id="all-time" class="small text-secondary mt-4 mb-2 placeholder-glow"><span class="placeholder col-10" aria-hidden="true"></span></p>
         <p id="storage" class="small text-secondary mb-0 placeholder-glow"><span class="placeholder col-8" aria-hidden="true"></span></p>
+        <div id="storage-meter" hidden><%- include('storage-progress', { percentage: 0 }) %></div>
+        <% if (isAdmin) { %>
+        <form id="quota-settings" class="row g-2 align-items-end mt-3">
+          <div class="col-12 col-sm-auto">
+            <label class="form-label" for="max-storage-mb">Storage quota (MB)</label>
+            <input class="form-control" id="max-storage-mb" name="max_storage_mb" type="number" min="0" step="any" required disabled aria-describedby="quota-help" />
+          </div>
+          <div class="col-12 col-sm-auto"><button class="btn btn-primary" type="submit" disabled>Save quota</button></div>
+          <p class="small text-secondary" id="quota-help">1 MB = 1,048,576 bytes. Zero disables new caching. Lowering the quota does not delete existing audio or interrupt streaming.</p>
+          <p id="quota-status" role="status" aria-live="polite" class="small mb-0"></p>
+        </form>
+        <% } %>
       </section>
       <section aria-labelledby="activity-heading" class="page-section panel">
         <h2 id="activity-heading" class="h4 mb-4">Recent activity</h2>

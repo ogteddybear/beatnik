@@ -1,3 +1,4 @@
+import { calculateGuildStorage, guildStorageSummary } from "@/core/cache/storage";
 import { config } from "@/core/config";
 import {
   type EventFilters,
@@ -5,6 +6,7 @@ import {
   guildEventPage,
   recentGuildCounts,
 } from "@/core/db/guild-events";
+import { MB, setGuildStorageLimit } from "@/core/db/guild-settings";
 import { guildStats } from "@/core/db/guild-stats";
 import SQLiteStore from "connect-sqlite3";
 import { DiscordScope, Strategy as DiscordStrategy } from "discord-strategy";
@@ -12,7 +14,6 @@ import type { Client } from "discord.js";
 import express from "express";
 import session from "express-session";
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import passport from "passport";
 
@@ -23,6 +24,7 @@ import {
   discordGuildId,
   invitePresentation,
 } from "./invite";
+import { getInfrastructureMetrics } from "./metrics";
 
 interface DashboardUser {
   id: string;
@@ -91,39 +93,15 @@ function avatarUrlFor(user: DashboardUser): string {
   return `https://cdn.discordapp.com/embed/avatars/${defaultAvatarIndex}.png`;
 }
 
-async function fileSize(file: string): Promise<number> {
-  try {
-    const info = await stat(file);
-    return info.isFile() ? info.size : 0;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return 0;
-    throw error;
-  }
-}
+export const guildStorageBytes = calculateGuildStorage;
 
-export async function guildStorageBytes(guildId: string): Promise<number> {
-  if (!guildId || guildId === "." || guildId === ".." || /[\\/:]/.test(guildId)) {
-    throw new Error("Invalid guild ID for cache");
-  }
-  const directory = path.join(config.libraryPath, guildId);
-  let files;
-  try {
-    files = await readdir(directory, { withFileTypes: true });
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return 0;
-    throw error;
-  }
-  let bytes = 0;
-  const cachedFiles = files.filter((file) => file.isFile() && file.name.endsWith(".cache"));
-  for (let offset = 0; offset < cachedFiles.length; offset += 32) {
-    const sizes = await Promise.all(
-      cachedFiles
-        .slice(offset, offset + 32)
-        .map((file) => fileSize(path.join(directory, file.name))),
-    );
-    bytes += sizes.reduce((total, size) => total + size, 0);
-  }
-  return bytes;
+async function storageView(guildId: string) {
+  const storage = await guildStorageSummary(guildId);
+  return {
+    ...storage,
+    storageUsed: formatBytes(storage.storageBytes),
+    storageLimit: formatBytes(storage.maxStorageBytes),
+  };
 }
 
 function formatBytes(bytes: number): string {
@@ -196,7 +174,7 @@ async function guildSummaries(guilds: ReturnType<typeof authorizedGuilds>) {
           commands: 0,
           errors: 0,
         },
-        storageUsed: formatBytes(await guildStorageBytes(guild.id)),
+        ...(await storageView(guild.id)),
       };
     }),
   );
@@ -501,6 +479,12 @@ export function createWebServer(client: Client) {
     if (req.user.id !== ADMIN_USER_ID) return res.sendStatus(403);
     return res.json({ guilds: await guildSummaries(authorizedGuilds(client, req.user.id, [])) });
   });
+  app.get("/api/admin/infrastructure", async (req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    if (!req.isAuthenticated() || !isDashboardUser(req.user)) return res.sendStatus(401);
+    if (req.user.id !== ADMIN_USER_ID) return res.sendStatus(403);
+    return res.json(await getInfrastructureMetrics());
+  });
   app.get("/admin", async (req, res) => {
     if (!req.isAuthenticated() || !isDashboardUser(req.user)) return res.redirect("/");
     if (req.user.id !== ADMIN_USER_ID) return res.redirect("/dashboard");
@@ -510,6 +494,7 @@ export function createWebServer(client: Client) {
       avatarUrl: avatarUrlFor(req.user),
       isAdmin: true,
       guilds: await guildSummaries(authorizedGuilds(client, req.user.id, [])),
+      infrastructure: await getInfrastructureMetrics(),
     });
   });
   app.get("/admin/guild/:guildId", (req, res) => {
@@ -539,9 +524,38 @@ export function createWebServer(client: Client) {
         week: guildEventCounts(req.params.guildId, now - 7 * DAY, now + 1),
         month: guildEventCounts(req.params.guildId, now - 30 * DAY, now + 1),
       },
-      storageUsed: formatBytes(await guildStorageBytes(req.params.guildId)),
+      ...(await storageView(req.params.guildId)),
     });
   });
+  app.post(
+    "/api/admin/guilds/:guildId/settings",
+    (req, res, next) => {
+      res.set("Cache-Control", "private, no-store");
+      if (!req.isAuthenticated() || !isDashboardUser(req.user)) return res.sendStatus(401);
+      if (req.user.id !== ADMIN_USER_ID) return res.sendStatus(403);
+      if (!client.guilds.cache.has(req.params.guildId)) return res.sendStatus(404);
+      // A custom header plus JSON prevents cross-site form submission. No CORS
+      // access is granted, so another origin cannot send this authenticated request.
+      if (req.get("X-Sashimi-Request") !== "quota" || !req.is("application/json"))
+        return res.status(403).json({ error: "Use the same-origin quota form." });
+      next();
+    },
+    express.json({ limit: "1kb" }),
+    async (req, res) => {
+      const mb: unknown = req.body?.max_storage_mb;
+      if (
+        typeof mb !== "number" ||
+        !Number.isFinite(mb) ||
+        mb < 0 ||
+        !Number.isSafeInteger(Math.round(mb * MB))
+      )
+        return res
+          .status(400)
+          .json({ error: "Quota must be a non-negative MB number within the safe byte range." });
+      setGuildStorageLimit(req.params.guildId, Math.round(mb * MB));
+      return res.json(await storageView(req.params.guildId));
+    },
+  );
   app.get("/api/admin/guilds/:guildId/events", (req, res) => {
     res.set("Cache-Control", "private, no-store");
     if (!req.isAuthenticated() || !isDashboardUser(req.user)) return res.sendStatus(401);

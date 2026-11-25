@@ -1,0 +1,6 @@
+<div class="progress mt-2" data-storage-progress role="progressbar" aria-label="Guild storage quota"
+     aria-valuenow="<%= Math.min(100, Math.max(0, percentage)) %>" aria-valuemin="0" aria-valuemax="100"
+     aria-valuetext="<%= Math.round(percentage) %>% of storage quota" style="height: 6px;">
+  <div class="progress-bar <%= percentage > 90 ? 'bg-danger' : 'bg-primary' %>"
+       style="width: <%= Math.min(100, Math.max(0, percentage)) %>%"></div>
+</div>

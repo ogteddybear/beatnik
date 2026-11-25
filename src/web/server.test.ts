@@ -61,7 +61,7 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
   await writeFile(path.join(libraryPath, "managed", "second.cache"), "more");
   await writeFile(path.join(libraryPath, "managed", "ignore.txt"), "not audio");
   await writeFile(path.join(libraryPath, "global", "legacy.cache"), "legacy audio");
-  assert.equal(await guildStorageBytes("managed"), Buffer.byteLength("cached audiomore"));
+  assert.equal(await guildStorageBytes("managed"), Buffer.byteLength("cached audiomorenot audio"));
   assert.equal(await guildStorageBytes("member"), 0);
   assert.equal(await guildStorageBytes("global"), Buffer.byteLength("legacy audio"));
   assert.rejects(guildStorageBytes("../managed"), /Invalid guild ID/);
@@ -276,6 +276,16 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
         ["managed", "admin"],
       );
       assert.equal((await request("/api/admin/guilds", memberCookie)).status, 403);
+      assert.equal((await request("/api/admin/infrastructure", memberCookie)).status, 403);
+      assert.equal((await request("/api/admin/infrastructure", "")).status, 401);
+      const infrastructureResponse = await request("/api/admin/infrastructure", ownerCookie);
+      assert.equal(infrastructureResponse.status, 200);
+      const infrastructureJson = await infrastructureResponse.json();
+      assert.equal(typeof infrastructureJson.uptime, "string");
+      assert.doesNotMatch(
+        JSON.stringify(infrastructureJson),
+        /FLY_API_TOKEN|FLY_ORG_SLUG|Authorization/,
+      );
       assert.equal((await request("/api/admin/guilds/managed/events", memberCookie)).status, 403);
       assert.equal((await request("/admin/guild/managed", memberCookie)).status, 302);
       assert.equal((await request("/api/admin/guilds/member/summary", memberCookie)).status, 403);
@@ -288,6 +298,47 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
       );
       assert.equal((await request("/admin/guild/managed", ownerCookie)).status, 200);
       assert.equal((await request("/api/admin/guilds/missing/events", ownerCookie)).status, 404);
+      const updateQuota = (body: unknown, cookie = ownerCookie, guild = "managed", header = true) =>
+        originalFetch(`${origin}/api/admin/guilds/${guild}/settings`, {
+          method: "POST",
+          headers: {
+            Cookie: cookie,
+            "Content-Type": "application/json",
+            ...(header ? { "X-Sashimi-Request": "quota" } : {}),
+          },
+          body: JSON.stringify(body),
+        });
+      assert.equal((await updateQuota({ max_storage_mb: 1 }, "")).status, 401);
+      assert.equal((await updateQuota({ max_storage_mb: 1 }, memberCookie)).status, 403);
+      assert.equal((await updateQuota({ max_storage_mb: 1 }, ownerCookie, "missing")).status, 404);
+      assert.equal(
+        (await updateQuota({ max_storage_mb: 1 }, ownerCookie, "managed", false)).status,
+        403,
+      );
+      for (const body of [
+        {},
+        { max_storage_mb: -1 },
+        { max_storage_mb: "1" },
+        { max_storage_mb: 1e20 },
+        { max_storage_mb: null },
+      ]) {
+        assert.equal((await updateQuota(body)).status, 400);
+      }
+      assert.equal(memberBody.guilds[0].maxStorageBytes, 104857600);
+      const quotaResponse = await updateQuota({ max_storage_mb: 1.5 });
+      assert.equal(quotaResponse.status, 200);
+      const quota = await quotaResponse.json();
+      assert.equal(quota.maxStorageBytes, 1.5 * 1048576);
+      assert.equal(quota.storageBytes, await guildStorageBytes("managed"));
+      const updatedSummary = await (
+        await request("/api/admin/guilds/managed/summary", ownerCookie)
+      ).json();
+      assert.equal(updatedSummary.maxStorageBytes, quota.maxStorageBytes);
+      assert.equal((await updateQuota({ max_storage_mb: 0 })).status, 200);
+      const noCache = await (await request("/api/dashboard/guilds", memberCookie)).json();
+      assert.equal(noCache.guilds[0].maxStorageBytes, 0);
+      assert.equal(noCache.guilds[0].storageOverQuota, true);
+      assert.equal((await updateQuota({ max_storage_mb: 100 })).status, 200);
       const { logEvent } = await import("@/core/db/guild-events");
       logEvent({ guildId: "managed", userId: "123", eventType: "command", action: "play" });
       logEvent({ guildId: "member", userId: "456", eventType: "player", action: "skip" });

@@ -15,9 +15,10 @@ import { builder as shuffle } from "./shuffle/builder";
 import { builder as skip } from "./skip/builder";
 import { builder as coach } from "./special/coach/builder";
 import { builder as stop } from "./stop/builder";
+import { builder as storage } from "./storage/builder";
 import { builder as volume } from "./volume/builder";
 
-const COMMANDS_VERSION = "1.4.0";
+const COMMANDS_VERSION = "1.5.0";
 const versionFile = path.join(config.libraryPath, ".commands-version");
 
 async function shouldDeploy() {
@@ -53,6 +54,7 @@ export async function deployCommands() {
       coach,
       volume,
       clear,
+      storage,
     ];
     const builderDefs = builders.map((b) => b.toJSON());
     const rest = new REST().setToken(token);

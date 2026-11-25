@@ -122,6 +122,23 @@
       title.className = "small text-secondary mb-0";
       title.textContent = label;
       item.append(value, title);
+      if (key === "storageUsed") {
+        const limit = document.createElement("small");
+        limit.className = "text-secondary";
+        limit.dataset.storageLimit = "";
+        const progress = document.createElement("div");
+        progress.className = "progress mt-2";
+        progress.dataset.storageProgress = "";
+        progress.style.height = "6px";
+        progress.setAttribute("role", "progressbar");
+        progress.setAttribute("aria-label", "Guild storage quota");
+        progress.setAttribute("aria-valuemin", "0");
+        progress.setAttribute("aria-valuemax", "100");
+        const bar = document.createElement("div");
+        bar.className = "progress-bar";
+        progress.append(bar);
+        item.append(limit, progress);
+      }
       grid.append(item);
     }
     card.append(grid);
@@ -170,9 +187,26 @@
     }
     for (const key of Object.keys(labels))
       col.querySelector(`[data-stat="${key}"]`).textContent = guild[key];
+    col.querySelector("[data-storage-limit]").textContent = `of ${guild.storageLimit ?? "100 MB"}`;
+    updateStorageProgress(col, guild);
     const recent = col.querySelector("[data-recent]");
     if (recent)
       recent.textContent = `Last 7 days: ${guild.recent.plays} plays · ${guild.recent.adds} library adds · ${guild.recent.commands} commands · ${guild.recent.errors} errors`;
+  }
+
+  function updateStorageProgress(container, data) {
+    const progress = container.querySelector("[data-storage-progress]");
+    if (!progress) return;
+    const percentage = Number.isFinite(data.storagePercentage) ? data.storagePercentage : 0;
+    const width = Math.max(0, Math.min(100, percentage));
+    progress.setAttribute("aria-valuenow", String(width));
+    progress.setAttribute(
+      "aria-valuetext",
+      `${Math.round(percentage)}% of storage quota${data.storageOverQuota ? " (over quota)" : ""}`,
+    );
+    const bar = progress.querySelector(".progress-bar");
+    bar.className = `progress-bar ${percentage > 90 || data.storageOverQuota ? "bg-danger" : "bg-primary"}`;
+    bar.style.width = `${width}%`;
   }
 
   async function refreshList() {
@@ -206,6 +240,42 @@
     if (total) total.textContent = `${data.guilds.length} total`;
     listLoaded = true;
     delete list.dataset.initial;
+  }
+
+  async function refreshInfrastructure() {
+    const panel = document.getElementById("infrastructure-health");
+    if (!panel) return;
+    let data;
+    try {
+      data = await load("/api/admin/infrastructure");
+    } catch {
+      panel.querySelector("[data-infra-uptime]").textContent = "Unavailable";
+      panel.querySelector("[data-infra-load]").textContent = "Unavailable";
+      panel.querySelector("[data-infra-cores]").textContent = "—";
+      panel.querySelector("[data-infra-source]").textContent = "Unavailable";
+    }
+    if (data) {
+      panel.querySelector("[data-infra-uptime]").textContent = data.uptime;
+      panel.querySelector("[data-infra-load]").textContent = data.loadAverage;
+      panel.querySelector("[data-infra-cores]").textContent = data.coreCount;
+      panel.querySelector("[data-infra-source]").textContent = data.volumeSource;
+    }
+    for (const key of ["memory", "cpu", "volume"]) {
+      const metric = data?.[key];
+      const value = panel.querySelector(`[data-infra-value="${key}"]`);
+      value.textContent = metric?.text ?? "Unavailable";
+      value.classList.toggle("text-secondary", metric?.percentage == null);
+      const meter = panel.querySelector(`[data-infra-meter="${key}"]`);
+      meter.hidden = metric?.percentage == null;
+      const percent = metric?.percentage ?? 0;
+      const width = Math.max(0, Math.min(100, percent));
+      const progress = meter.querySelector(".progress");
+      progress.setAttribute("aria-valuenow", String(width));
+      progress.setAttribute("aria-valuetext", `${Math.round(percent)}%`);
+      const bar = meter.querySelector(".progress-bar");
+      bar.className = `progress-bar ${percent > 90 ? "bg-danger" : "bg-primary"}`;
+      bar.style.width = `${width}%`;
+    }
   }
 
   const guildId = document.body.dataset.guildId;
@@ -404,7 +474,16 @@
       document.getElementById("all-time").textContent =
         `Since tracking began: ${totals.plays} plays · ${totals.requests} requests · ${totals.skips} skips · ${totals.stops} stops · ${totals.commands_used} commands.`;
       document.getElementById("storage").textContent =
-        `Audio storage: ${data.storageUsed}. Shared audio files aren’t included.`;
+        `Audio storage: ${data.storageUsed} / ${data.storageLimit ?? "100 MB"} (${Math.round(data.storagePercentage ?? 0)}%). Shared audio files aren’t included.`;
+      document.getElementById("storage-meter").hidden = false;
+      updateStorageProgress(document.getElementById("storage-meter"), data);
+      const quotaInput = document.getElementById("max-storage-mb");
+      if (quotaInput && !quotaInput.dataset.loaded) {
+        quotaInput.value = String(data.maxStorageBytes / 1048576);
+        quotaInput.disabled = false;
+        quotaInput.dataset.loaded = "true";
+        document.querySelector("#quota-settings button").disabled = false;
+      }
       summaryLoaded = true;
       setStatus("Statistics are up to date.");
       return true;
@@ -446,7 +525,10 @@
           return;
         }
       } else {
-        await refreshList();
+        await Promise.all([
+          refreshList(),
+          mode === "admin" ? refreshInfrastructure() : Promise.resolve(),
+        ]);
       }
       setStatus("Statistics are up to date.");
     } catch (error) {
@@ -468,6 +550,30 @@
     form.addEventListener("submit", applyFilters);
     older.addEventListener("click", () => void loadActivity("older"));
     applyFilters();
+    document.getElementById("quota-settings")?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const input = document.getElementById("max-storage-mb");
+      const button = event.currentTarget.querySelector("button");
+      const feedback = document.getElementById("quota-status");
+      button.disabled = true;
+      feedback.textContent = "Saving quota…";
+      try {
+        const response = await fetch(`${base}/settings`, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json", "X-Sashimi-Request": "quota" },
+          body: JSON.stringify({ max_storage_mb: Number(input.value) }),
+        });
+        if (!response.ok)
+          throw new Error("Quota could not be saved. Check the value and your owner session.");
+        await refreshDetailSummary();
+        feedback.textContent = "Quota saved. Existing files have not been deleted.";
+      } catch (error) {
+        feedback.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
   }
   void refresh();
   setInterval(() => void refresh(), 15_000);

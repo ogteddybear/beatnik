@@ -16,6 +16,10 @@
         <div class="col">
           <p class="h5 fw-semibold mb-0" data-stat="<%= key %>"><%= guild[key] %></p>
           <p class="small text-secondary mb-0"><%= label %></p>
+          <% if (key === 'storageUsed') { %>
+            <small class="text-secondary" data-storage-limit>of <%= guild.storageLimit ?? '100 MB' %></small>
+            <%- include('storage-progress', { percentage: guild.storagePercentage ?? 0 }) %>
+          <% } %>
         </div>
       <% } %>
     </div>

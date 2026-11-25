@@ -95,6 +95,15 @@ const migrations: Migration[] = [
     },
   },
   { name: "004_guild_event_names", up: ensureGuildEventColumns },
+  {
+    name: "005_guild_storage_quota",
+    up: (db) => {
+      db.exec(`CREATE TABLE IF NOT EXISTS GuildSettings (
+        guild_id TEXT PRIMARY KEY,
+        max_storage_bytes INTEGER NOT NULL DEFAULT 104857600 CHECK (max_storage_bytes >= 0)
+      )`);
+    },
+  },
 ];
 
 export function runMigrations(db: Database): void {
