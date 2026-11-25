@@ -27,12 +27,27 @@
     col.className = "col";
     col.dataset.guildId = guild.id;
     const card = document.createElement("article");
-    card.className = "card dashboard-card h-100 p-4";
+    card.className = "card dashboard-card server-card h-100 p-4";
+    const header = document.createElement("div");
+    header.className = "server-card-header";
+    const identity = document.createElement("div");
+    identity.className = "server-card-identity";
+    const image = document.createElement("img");
+    image.className = "guild-icon";
+    image.alt = "";
+    image.width = 56;
+    image.height = 56;
+    const fallback = document.createElement("div");
+    fallback.className = "guild-icon guild-placeholder";
+    fallback.setAttribute("aria-hidden", "true");
+    identity.append(image, fallback);
+    header.append(identity);
     const heading = document.createElement(admin ? "a" : "h3");
-    heading.className = "h5 fw-semibold text-break";
-    heading.textContent = guild.name;
+    heading.className = "h5 fw-semibold text-break mb-0 server-card-title";
+    heading.dataset.guildName = "";
     if (admin) heading.href = `/admin/guild/${encodeURIComponent(guild.id)}`;
-    card.append(heading);
+    header.append(heading);
+    card.append(header);
     const grid = document.createElement("div");
     grid.className = "row row-cols-2 row-cols-md-3 g-3 text-center";
     for (const [key, label] of Object.entries(labels)) {
@@ -40,7 +55,7 @@
       item.className = "col";
       const value = document.createElement("p");
       value.className = "h5 fw-semibold mb-0";
-      value.textContent = guild[key];
+      value.dataset.stat = key;
       const title = document.createElement("p");
       title.className = "small text-secondary mb-0";
       title.textContent = label;
@@ -51,17 +66,69 @@
     if (admin) {
       const recent = document.createElement("p");
       recent.className = "small text-secondary mt-3 mb-0";
-      recent.textContent = `Last 7 days: ${guild.recent.plays} plays · ${guild.recent.adds} library adds · ${guild.recent.commands} commands · ${guild.recent.errors} errors`;
+      recent.dataset.recent = "";
       card.append(recent);
+      const open = document.createElement("a");
+      open.href = heading.href;
+      open.className = "btn btn-outline-light mt-4 align-self-start";
+      open.textContent = "View server analytics →";
+      card.append(open);
     }
     col.append(card);
+    updateCard(col, guild);
     return col;
+  }
+
+  function updateCard(col, guild) {
+    col.querySelector("[data-guild-name]").textContent = guild.name;
+    const image = col.querySelector("img.guild-icon");
+    const fallback = col.querySelector(".guild-placeholder");
+    if (!image.dataset.errorBound) {
+      image.addEventListener("error", () => {
+        image.hidden = true;
+        fallback.hidden = false;
+      });
+      image.dataset.errorBound = "true";
+      if (image.complete && image.getAttribute("src") && image.naturalWidth === 0) {
+        image.hidden = true;
+        fallback.hidden = false;
+      }
+    }
+    fallback.textContent = guild.name.charAt(0).toUpperCase() || "♫";
+    if (guild.iconUrl) {
+      if (image.getAttribute("src") !== guild.iconUrl) {
+        image.src = guild.iconUrl;
+        image.hidden = false;
+        fallback.hidden = true;
+      }
+    } else {
+      image.removeAttribute("src");
+      image.hidden = true;
+      fallback.hidden = false;
+    }
+    for (const key of Object.keys(labels))
+      col.querySelector(`[data-stat="${key}"]`).textContent = guild[key];
+    const recent = col.querySelector("[data-recent]");
+    if (recent)
+      recent.textContent = `Last 7 days: ${guild.recent.plays} plays · ${guild.recent.adds} library adds · ${guild.recent.commands} commands · ${guild.recent.errors} errors`;
   }
 
   async function refreshList() {
     const data = await load(mode === "admin" ? "/api/admin/guilds" : "/api/dashboard/guilds");
     const list = document.getElementById("guild-list");
-    list.replaceChildren(...data.guilds.map((guild) => serverCard(guild, mode === "admin")));
+    const existing = new Map([...list.children].map((col) => [col.dataset.guildId, col]));
+    const ids = new Set(data.guilds.map((guild) => guild.id));
+    for (const col of [...list.children]) if (!ids.has(col.dataset.guildId)) col.remove();
+    for (const guild of data.guilds) {
+      let col = existing.get(guild.id);
+      // Upgrade older server-rendered cards once; subsequent refreshes preserve their DOM.
+      if (!col?.querySelector("[data-guild-name]")) {
+        const replacement = serverCard(guild, mode === "admin");
+        if (col) col.replaceWith(replacement);
+        else list.append(replacement);
+        col = replacement;
+      } else updateCard(col, guild);
+    }
     if (!data.guilds.length) {
       const empty = document.createElement("p");
       empty.className = "text-secondary";

@@ -45,47 +45,7 @@
             <div class="col"><div class="card dashboard-card p-4 text-secondary">No eligible servers found. Manage a server where Sashimi is installed, or invite Sashimi to one.</div></div>
           <% } else { %>
             <% for (const guild of guilds) { %>
-              <div class="col" data-guild-id="<%= guild.id %>">
-                <article class="card dashboard-card h-100 p-4">
-                  <div class="d-flex align-items-center gap-3 mb-4">
-                    <% if (guild.iconUrl) { %>
-                      <img class="guild-icon" src="<%= guild.iconUrl %>" alt="" width="56" height="56" loading="lazy" />
-                    <% } else { %>
-                      <div class="guild-icon guild-placeholder" aria-hidden="true"><%= guild.name.charAt(0).toUpperCase() %></div>
-                    <% } %>
-                    <h3 class="h5 fw-semibold mb-0 text-break"><%= guild.name %></h3>
-                  </div>
-                  <div class="row row-cols-2 row-cols-md-3 g-3 text-center mb-3">
-                    <div class="col">
-                      <p class="h5 fw-semibold mb-0" data-stat="plays"><%= guild.plays %></p>
-                      <p class="small text-secondary mb-0">Plays</p>
-                    </div>
-                    <div class="col">
-                      <p class="h5 fw-semibold mb-0" data-stat="requests"><%= guild.requests %></p>
-                      <p class="small text-secondary mb-0">Requests</p>
-                    </div>
-                    <div class="col">
-                      <p class="h5 fw-semibold mb-0" data-stat="storageUsed"><%= guild.storageUsed %></p>
-                      <p class="small text-secondary mb-0">Storage</p>
-                    </div>
-                    <div class="col">
-                      <p class="h5 fw-semibold mb-0" data-stat="skips"><%= guild.skips %></p>
-                      <p class="small text-secondary mb-0">Skips</p>
-                    </div>
-                    <div class="col">
-                      <p class="h5 fw-semibold mb-0" data-stat="stops"><%= guild.stops %></p>
-                      <p class="small text-secondary mb-0">Stops</p>
-                    </div>
-                    <div class="col">
-                      <p class="h5 fw-semibold mb-0" data-stat="commands"><%= guild.commands %></p>
-                      <p class="small text-secondary mb-0">Commands</p>
-                    </div>
-                  </div>
-                  <p class="small text-secondary mb-0">
-                    Cached audio in this server's directory. Shared legacy files in global/ are excluded.
-                  </p>
-                </article>
-              </div>
+              <%- include('server-card', { guild, isAdmin: false }) %>
             <% } %>
           <% } %>
         </div>

@@ -36,7 +36,7 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
   assert.equal(canManageGuild("1024"), false);
   assert.equal(canManageGuild("not-a-bitmask"), false);
   const guilds = new Map([
-    ["managed", { id: "managed", name: "Managed", icon: null }],
+    ["managed", { id: "managed", name: "Managed", icon: "guild-icon-hash" }],
     ["member", { id: "member", name: "Member", icon: null }],
     ["admin", { id: "admin", name: "Admin", icon: null }],
   ]);
@@ -72,6 +72,7 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
     guilds: [
       {
         name: "Managed",
+        id: "managed",
         iconUrl: null,
         plays: 2,
         requests: 3,
@@ -105,6 +106,7 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
     username: "Owner",
     avatarUrl: "https://cdn.discordapp.com/embed/avatars/0.png",
     isAdmin: true,
+    guilds: [],
   });
   assert.match(admin, /All bot servers/);
   const detail = await ejs.renderFile(path.join("src", "web", "views", "guild-detail.ejs"), {
@@ -264,8 +266,13 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
       const request = (uri: string, cookie: string) =>
         originalFetch(`${origin}${uri}`, { headers: { Cookie: cookie }, redirect: "manual" });
       const memberStats = await request("/api/dashboard/guilds", memberCookie);
+      const memberBody = await memberStats.json();
+      assert.equal(
+        memberBody.guilds[0].iconUrl,
+        "https://cdn.discordapp.com/icons/managed/guild-icon-hash.png",
+      );
       assert.deepEqual(
-        (await memberStats.json()).guilds.map((guild: { id: string }) => guild.id),
+        memberBody.guilds.map((guild: { id: string }) => guild.id),
         ["managed", "admin"],
       );
       assert.equal((await request("/api/admin/guilds", memberCookie)).status, 403);
@@ -273,8 +280,10 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
       assert.equal((await request("/admin/guild/managed", memberCookie)).status, 302);
       assert.equal((await request("/api/admin/guilds/member/summary", memberCookie)).status, 403);
       const overview = await request("/api/admin/guilds", ownerCookie);
+      const overviewBody = await overview.json();
+      assert.equal(overviewBody.guilds[0].iconUrl, memberBody.guilds[0].iconUrl);
       assert.deepEqual(
-        (await overview.json()).guilds.map((guild: { id: string }) => guild.id),
+        overviewBody.guilds.map((guild: { id: string }) => guild.id),
         ["managed", "member", "admin"],
       );
       assert.equal((await request("/admin/guild/managed", ownerCookie)).status, 200);

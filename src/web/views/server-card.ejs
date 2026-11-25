@@ -1,0 +1,27 @@
+<div class="col" data-guild-id="<%= guild.id %>">
+  <article class="card dashboard-card server-card h-100 p-4">
+    <div class="server-card-header">
+      <div class="server-card-identity">
+        <img class="guild-icon" <% if (guild.iconUrl) { %>src="<%= guild.iconUrl %>"<% } %> alt="" width="56" height="56" <%= guild.iconUrl ? '' : 'hidden' %> />
+        <div class="guild-icon guild-placeholder" aria-hidden="true" <%= guild.iconUrl ? 'hidden' : '' %>><%= guild.name.charAt(0).toUpperCase() || '♫' %></div>
+      </div>
+      <% if (isAdmin) { %>
+        <a class="h5 fw-semibold text-break mb-0 server-card-title" data-guild-name href="/admin/guild/<%= encodeURIComponent(guild.id) %>"><%= guild.name %></a>
+      <% } else { %>
+        <h3 class="h5 fw-semibold text-break mb-0 server-card-title" data-guild-name><%= guild.name %></h3>
+      <% } %>
+    </div>
+    <div class="row row-cols-2 row-cols-md-3 g-3 text-center">
+      <% for (const [key, label] of Object.entries({ plays: 'Plays', requests: 'Requests', storageUsed: 'Storage', skips: 'Skips', stops: 'Stops', commands: 'Commands' })) { %>
+        <div class="col">
+          <p class="h5 fw-semibold mb-0" data-stat="<%= key %>"><%= guild[key] %></p>
+          <p class="small text-secondary mb-0"><%= label %></p>
+        </div>
+      <% } %>
+    </div>
+    <% if (isAdmin) { %>
+      <p class="small text-secondary mt-3 mb-0" data-recent>Last 7 days: <%= guild.recent.plays %> plays · <%= guild.recent.adds %> library adds · <%= guild.recent.commands %> commands · <%= guild.recent.errors %> errors</p>
+      <a class="btn btn-outline-light mt-4 align-self-start" href="/admin/guild/<%= encodeURIComponent(guild.id) %>">View server analytics →</a>
+    <% } %>
+  </article>
+</div>

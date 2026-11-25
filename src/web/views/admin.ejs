@@ -23,17 +23,26 @@
         </div>
       </div>
     </nav>
-    <main class="container py-5">
-      <header class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <main class="container admin-page py-4 py-md-5">
+      <header class="admin-header">
         <div>
-          <p class="text-primary text-uppercase fw-semibold small mb-2">Bot owner · last 7 days</p>
+          <p class="text-primary text-uppercase fw-semibold small mb-2">Owner workspace</p>
           <h1 class="display-6 fw-bold mb-0">All bot servers</h1>
         </div>
         <a class="btn btn-outline-light" href="/dashboard">Back to dashboard</a>
       </header>
-      <p class="text-secondary">Open a server for activity, filters, and longer-range statistics. Totals include events since tracking began.</p>
-      <p id="live-status" class="small text-secondary" role="status" aria-live="polite">Loading server statistics…</p>
-      <section id="guild-list" class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3" aria-label="Bot servers"></section>
+      <p class="text-secondary admin-description">A clear view of every server playing with Sashimi. Open a server to explore its activity and analytics.</p>
+      <div class="admin-toolbar">
+        <div><h2 class="h5 mb-1">Server directory</h2><span id="guild-total" class="small text-secondary"><%= guilds.length %> total</span></div>
+        <p id="live-status" class="small text-secondary mb-0" role="status" aria-live="polite">Statistics refresh automatically.</p>
+      </div>
+      <section id="guild-list" class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-4" aria-label="Bot servers">
+        <% for (const guild of guilds) { %>
+          <%- include('server-card', { guild, isAdmin: true }) %>
+        <% } %>
+        <% if (!guilds.length) { %><div class="col"><p class="text-secondary">Sashimi is not in any servers yet.</p></div><% } %>
+      </section>
+      <p class="small text-secondary mt-4">Totals since tracking began · Activity highlights cover the last 7 days · Storage excludes shared global cache.</p>
     </main>
   </body>
 </html>

@@ -427,7 +427,7 @@ export function createWebServer(client: Client) {
     if (req.user.id !== ADMIN_USER_ID) return res.sendStatus(403);
     return res.json({ guilds: await guildSummaries(authorizedGuilds(client, req.user.id, [])) });
   });
-  app.get("/admin", (req, res) => {
+  app.get("/admin", async (req, res) => {
     if (!req.isAuthenticated() || !isDashboardUser(req.user)) return res.redirect("/");
     if (req.user.id !== ADMIN_USER_ID) return res.redirect("/dashboard");
     res.set("Cache-Control", "private, no-store");
@@ -435,6 +435,7 @@ export function createWebServer(client: Client) {
       username: req.user.username,
       avatarUrl: avatarUrlFor(req.user),
       isAdmin: true,
+      guilds: await guildSummaries(authorizedGuilds(client, req.user.id, [])),
     });
   });
   app.get("/admin/guild/:guildId", (req, res) => {
