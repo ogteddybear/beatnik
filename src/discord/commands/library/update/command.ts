@@ -15,15 +15,23 @@ export async function updatePlaylistWithInteraction(
     guildId,
     playlistIntId,
     createDownloadProgressHandler(interaction),
+    { userId: interaction.user.id, username: interaction.user.username },
   );
   if (!update || !update.operation) {
     await interaction.editReply("Something went wrong.");
   } else {
     if (update.operation.completed > 0) {
       try {
-        logEvent(guildId, interaction.user.id, "library", "update", {
-          playlistId: update.playlistData.id,
-          count: update.operation.completed,
+        logEvent({
+          guildId,
+          userId: interaction.user.id,
+          username: interaction.user.username,
+          eventType: "library",
+          action: "update",
+          metadata: {
+            playlistId: update.playlistData.id,
+            count: update.operation.completed,
+          },
         });
       } catch (error) {
         console.error("Unable to record library event:", error);

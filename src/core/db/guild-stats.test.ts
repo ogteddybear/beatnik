@@ -25,7 +25,7 @@ test("guild requests, plays, and requested tracks remain isolated", async () => 
   `);
   legacy.close();
 
-  const { db } = await import("./client");
+  const { db, archiveDb } = await import("./client");
   try {
     const { guildStats } = await import("./guild-stats");
     const { logEvent, getLatestEvents } = await import("./guild-events");
@@ -36,13 +36,28 @@ test("guild requests, plays, and requested tracks remain isolated", async () => 
       stops: 0,
       commands_used: 0,
     });
-    guildStats.recordRequests("guild-a", "user-a", ["track-1", "track-1", "track-2"]);
-    guildStats.recordRequests("guild-b", "user-b", ["track-1"]);
-    logEvent("guild-a", "user-a", "player", "play", { trackId: "track-1" });
-    logEvent("guild-a", "user-a", "command", "skip");
-    logEvent("guild-a", "user-a", "player", "skip");
-    logEvent("guild-a", null, "player", "stop");
-    logEvent("guild-a", "user-a", "player_error", "unplayable");
+    guildStats.recordRequests(
+      "guild-a",
+      "user-a",
+      ["track-1", "track-1", "track-2"].map((id) => ({ id })),
+    );
+    guildStats.recordRequests("guild-b", "user-b", [{ id: "track-1" }]);
+    logEvent({
+      guildId: "guild-a",
+      userId: "user-a",
+      eventType: "player",
+      action: "play",
+      trackId: "track-1",
+    });
+    logEvent({ guildId: "guild-a", userId: "user-a", eventType: "command", action: "skip" });
+    logEvent({ guildId: "guild-a", userId: "user-a", eventType: "player", action: "skip" });
+    logEvent({ guildId: "guild-a", eventType: "player", action: "stop" });
+    logEvent({
+      guildId: "guild-a",
+      userId: "user-a",
+      eventType: "player_error",
+      action: "unplayable",
+    });
 
     assert.deepEqual(guildStats.get("guild-a"), {
       requests: 5,
@@ -74,6 +89,7 @@ test("guild requests, plays, and requested tracks remain isolated", async () => 
     assert(lastActive && lastActive.last_active_at > 0);
   } finally {
     db.close();
+    archiveDb.close();
     await rm(directory, { recursive: true, force: true });
   }
 });

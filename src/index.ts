@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { testLibraryConnection } from "./core/cache/operations";
+import { startEventArchiver } from "./core/db/event-archive";
 import { initProviders } from "./core/manager";
 import { startDiscord } from "./discord/client";
 import { createWebServer } from "./web/server";
@@ -25,3 +26,4 @@ const port = Number(process.env.PORT ?? 8080);
 app.listen(port, "0.0.0.0", () => {
   console.log(`Web dashboard listening on port ${port}`);
 });
+startEventArchiver();

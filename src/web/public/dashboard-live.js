@@ -224,15 +224,33 @@
   function eventRow(event) {
     const row = document.createElement("tr");
     row.dataset.eventId = event.id;
-    for (const value of [
+    for (const [index, value] of [
       event.time,
-      event.userId ? `${event.user} (${event.userId})` : event.user,
+      event.username || event.user,
       event.eventType,
       event.action,
       event.details,
-    ]) {
+    ].entries()) {
       const cell = document.createElement("td");
-      cell.textContent = value;
+      if (index === 2 || (index === 3 && event.action === "download")) {
+        const badge = document.createElement("span");
+        badge.className = "event-badge";
+        badge.dataset.kind = index === 2 ? event.eventType : "download";
+        badge.textContent = value;
+        cell.append(badge);
+      } else cell.textContent = value;
+      if (index === 1 && event.userId) {
+        const subtitle = document.createElement("small");
+        subtitle.className = "text-secondary d-block";
+        subtitle.textContent = event.userId;
+        cell.append(subtitle);
+      }
+      if (index === 4 && event.trackName) {
+        const title = document.createElement("strong");
+        title.className = "d-block mb-1";
+        title.textContent = event.trackName;
+        cell.prepend(title);
+      }
       row.append(cell);
     }
     return row;
@@ -244,8 +262,6 @@
     for (const event of events) {
       if (seen.has(event.id)) continue;
       seen.add(event.id);
-      latestId = Math.max(latestId, event.id);
-      oldestId = oldestId ? Math.min(oldestId, event.id) : event.id;
       if (isLive) rows.prepend(eventRow(event));
       else rows.append(eventRow(event));
     }
@@ -255,6 +271,7 @@
       rows.lastElementChild.remove();
     }
     if (rows.lastElementChild) oldestId = Number(rows.lastElementChild.dataset.eventId);
+    if (rows.firstElementChild) latestId = Number(rows.firstElementChild.dataset.eventId);
     if (!rows.children.length) showTableMessage(rows, "No activity matches these filters.", 5);
   }
 

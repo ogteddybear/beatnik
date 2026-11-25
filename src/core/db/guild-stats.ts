@@ -16,13 +16,29 @@ const trackRequest = db.prepare<[string, string, number]>(`
     last_requested_at = excluded.last_requested_at
 `);
 
-const recordRequests = db.transaction((guildId: string, userId: string, trackIds: string[]) => {
-  const now = Date.now();
-  for (const trackId of trackIds) {
-    logEvent(guildId, userId, "player", "request", { trackId });
-    trackRequest.run(guildId, trackId, now);
-  }
-});
+const recordRequests = db.transaction(
+  (
+    guildId: string,
+    userId: string,
+    requestedTracks: { id: string; title?: string; providerId?: string }[],
+    username?: string,
+  ) => {
+    const now = Date.now();
+    for (const track of requestedTracks) {
+      logEvent({
+        guildId,
+        userId,
+        username,
+        eventType: "player",
+        action: "request",
+        trackId: track.id,
+        trackName: track.title,
+        metadata: { providerId: track.providerId },
+      });
+      trackRequest.run(guildId, track.id, now);
+    }
+  },
+);
 
 export const guildStats = {
   recordRequests,

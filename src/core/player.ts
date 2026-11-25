@@ -2,7 +2,7 @@ import type { Provider, ProviderTrack } from "@/providers";
 import { log } from "@/shared";
 import type { Readable } from "node:stream";
 
-import { logEvent } from "./db/guild-events";
+import { type EventOptions, logEvent } from "./db/guild-events";
 import { guildStats } from "./db/guild-stats";
 import type { Queue, QueuedTrack } from "./queue";
 import { shuffleArray } from "./queue";
@@ -22,20 +22,17 @@ export class CorePlayer {
 
   isPlaying = false;
   fromCache: boolean | null = null;
+  volume = 100;
+  onVolume?: (percent: number) => void;
 
   onStream?: (track: ProviderTrack, stream: Readable) => void | Promise<void>;
   onQueueEnd?: () => void;
   onStop?: () => void;
   onError?: (track: ProviderTrack, err: Error) => void;
 
-  private logPlayerEvent(
-    userId: string | null,
-    eventType: string,
-    action: string,
-    metadata?: Record<string, unknown>,
-  ) {
+  private logPlayerEvent(options: Omit<EventOptions, "guildId">) {
     try {
-      logEvent(this.guildId, userId, eventType, action, metadata);
+      logEvent({ guildId: this.guildId, ...options });
     } catch (error) {
       console.error("Unable to record player event:", error);
     }
@@ -46,6 +43,7 @@ export class CorePlayer {
     userId: string,
     willShuffle = false,
     playNext = false,
+    username?: string,
   ): Promise<QueuedTrack[]> {
     const { metadata, type } = await resolveQuery(query);
     let tracks: ProviderTrack[] = [];
@@ -57,12 +55,12 @@ export class CorePlayer {
     if (willShuffle) tracks = shuffleArray(tracks);
     // Explicit playNext inserts after the current track; otherwise preserve FIFO by appending.
     const basis = playNext ? this.queue.currentIndex + 1 : this.queue.tracks.length;
-    const queuedTracks = tracks.map((track) => ({ ...track, addedBy: userId }));
-    guildStats.recordRequests(
-      this.guildId,
-      userId,
-      queuedTracks.map((track) => track.id),
-    );
+    const queuedTracks = tracks.map((track) => ({
+      ...track,
+      addedBy: userId,
+      addedByUsername: username,
+    }));
+    guildStats.recordRequests(this.guildId, userId, queuedTracks, username);
     return queuedTracks.map((queuedTrack, idx) => {
       this.queue.insert(queuedTrack, basis + idx);
       return queuedTrack;
@@ -95,9 +93,16 @@ export class CorePlayer {
           name: "PLAYER",
           message: `Skipping unplayable track ${track.providerId}:${track.id}: ${err}`,
         });
-        this.logPlayerEvent(track.addedBy, "player_error", "unplayable", {
+        this.logPlayerEvent({
+          userId: track.addedBy,
+          username: track.addedByUsername,
+          eventType: "player_error",
+          action: "unplayable",
           trackId: track.id,
-          providerId: track.providerId,
+          trackName: track.title,
+          metadata: {
+            providerId: track.providerId,
+          },
         });
         this.isPlaying = false;
         await this.next();
@@ -109,7 +114,15 @@ export class CorePlayer {
       const onStream = this.onStream;
       if (onStream) {
         await onStream(trackWithLoudness, stream);
-        this.logPlayerEvent(track.addedBy, "player", "play", { trackId: track.id });
+        this.logPlayerEvent({
+          userId: track.addedBy,
+          username: track.addedByUsername,
+          eventType: "player",
+          action: "play",
+          trackId: track.id,
+          trackName: track.title,
+          metadata: { providerId: track.providerId },
+        });
       }
       log({
         component: "CORE",
@@ -118,10 +131,17 @@ export class CorePlayer {
       });
     } catch (err) {
       this.isPlaying = false;
-      this.logPlayerEvent(track.addedBy, "player_error", "play", {
+      this.logPlayerEvent({
+        userId: track.addedBy,
+        username: track.addedByUsername,
+        eventType: "player_error",
+        action: "play",
         trackId: track.id,
-        providerId: track.providerId,
-        errorName: err instanceof Error ? err.name : "UnknownError",
+        trackName: track.title,
+        metadata: {
+          providerId: track.providerId,
+          errorName: err instanceof Error ? err.name : "UnknownError",
+        },
       });
       this.onError?.(track, err instanceof Error ? err : new Error(String(err)));
       await this.next();
@@ -133,10 +153,17 @@ export class CorePlayer {
     await this.play();
   }
 
-  async skip(userId: string, idx?: number) {
+  async skip(userId: string, idx?: number, username?: string) {
     const track = this.queue.nowPlaying;
     if (!track) return;
-    this.logPlayerEvent(userId, "player", "skip", { trackId: track.id });
+    this.logPlayerEvent({
+      userId,
+      username,
+      eventType: "player",
+      action: "skip",
+      trackId: track.id,
+      trackName: track.title,
+    });
     if (idx === undefined) await this.next();
     else await this.jump(idx);
   }
@@ -146,10 +173,16 @@ export class CorePlayer {
     await this.play();
   }
 
-  async stop(userId: string | null = null) {
+  async stop(userId: string | null = null, username?: string) {
     if (this.queue.tracks.length || this.isPlaying) {
-      this.logPlayerEvent(userId, "player", "stop", {
-        reason: userId ? "command" : "automatic",
+      this.logPlayerEvent({
+        userId,
+        username,
+        eventType: "player",
+        action: "stop",
+        metadata: {
+          reason: userId ? "command" : "automatic",
+        },
       });
     }
     this.isPlaying = false;
@@ -157,5 +190,32 @@ export class CorePlayer {
     this.queue.currentIndex = 0;
     this.queue.tracks = [];
     this.onStop?.();
+  }
+
+  setVolume(percent: number, userId: string, username?: string) {
+    if (!Number.isFinite(percent) || percent < 0 || percent > 200)
+      throw new Error("Volume must be between 0 and 200.");
+    const previous = this.volume;
+    this.volume = percent;
+    this.onVolume?.(percent);
+    this.logPlayerEvent({
+      userId,
+      username,
+      eventType: "volume",
+      action: "set",
+      metadata: { previous, percent },
+    });
+  }
+
+  clear(userId: string, username?: string) {
+    const removed = this.queue.tracks.splice(this.queue.currentIndex + 1).length;
+    this.logPlayerEvent({
+      userId,
+      username,
+      eventType: "player",
+      action: "clear",
+      metadata: { removedCount: removed },
+    });
+    return removed;
   }
 }

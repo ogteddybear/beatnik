@@ -9,11 +9,12 @@ export function getOrCreateVoiceSession(
   voiceChannel: VoiceBasedChannel,
   textChannel: TextBasedChannel | null,
   corePlayer: CorePlayer,
+  actor?: { userId: string; username: string },
 ): VoiceSession {
   const { guildId } = voiceChannel;
   let session = voiceSessions.get(guildId);
   if (!session) {
-    session = new VoiceSession(voiceChannel, textChannel, corePlayer);
+    session = new VoiceSession(voiceChannel, textChannel, corePlayer, actor);
     voiceSessions.set(guildId, session);
   }
   return session;

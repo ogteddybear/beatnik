@@ -17,12 +17,21 @@ export async function enqueueAndPlay(
 
   const { shuffle = false, playNext = false } = options;
   const { player } = getOrCreateSession(guildId);
-  getOrCreateVoiceSession(voiceChannel, interaction.channel, player);
+  getOrCreateVoiceSession(voiceChannel, interaction.channel, player, {
+    userId: interaction.user.id,
+    username: interaction.user.username,
+  });
 
   const allTracksQueued = [];
 
   for (const query of queries) {
-    const tracks = await player.enqueue(query, interaction.user.id, shuffle, playNext);
+    const tracks = await player.enqueue(
+      query,
+      interaction.user.id,
+      shuffle,
+      playNext,
+      interaction.user.username,
+    );
     allTracksQueued.push(...tracks);
   }
 

@@ -289,9 +289,18 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
       assert.equal((await request("/admin/guild/managed", ownerCookie)).status, 200);
       assert.equal((await request("/api/admin/guilds/missing/events", ownerCookie)).status, 404);
       const { logEvent } = await import("@/core/db/guild-events");
-      logEvent("managed", "123", "command", "play");
-      logEvent("member", "456", "player", "skip");
-      logEvent("managed", "123", "player", "request", { trackId: "track-one", secret: "hide-me" });
+      logEvent({ guildId: "managed", userId: "123", eventType: "command", action: "play" });
+      logEvent({ guildId: "member", userId: "456", eventType: "player", action: "skip" });
+      logEvent({
+        guildId: "managed",
+        userId: "123",
+        username: "Recorded listener",
+        trackName: "Recorded song",
+        eventType: "player",
+        action: "request",
+        trackId: "track-one",
+        metadata: { secret: "hide-me" },
+      });
       const events = await request("/api/admin/guilds/managed/events?user=123", ownerCookie);
       const eventBody = await events.json();
       assert.deepEqual(
@@ -299,6 +308,8 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
         ["request", "play"],
       );
       assert.equal(eventBody.events[0].details, "trackId: track-one");
+      assert.equal(eventBody.events[0].user, "Recorded listener");
+      assert.equal(eventBody.events[0].trackName, "Recorded song");
       assert.equal(JSON.stringify(eventBody).includes("hide-me"), false);
       const since = await request(
         `/api/admin/guilds/managed/events?since=${eventBody.events[1].id}`,
@@ -322,6 +333,27 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
         (await request("/api/admin/guilds/managed/events?before=oops", ownerCookie)).status,
         400,
       );
+      const { db } = await import("@/core/db/client");
+      logEvent({
+        guildId: "managed",
+        userId: "123",
+        username: "Archived listener",
+        trackName: "Archived song",
+        eventType: "library",
+        action: "download",
+        trackId: "old-track",
+      });
+      db.prepare("UPDATE GuildEvents SET created_at = ? WHERE action = 'download'").run(
+        Date.now() - 45 * 86_400_000,
+      );
+      const { archiveOldEvents } = await import("@/core/db/event-archive");
+      await archiveOldEvents();
+      const archivedPath = `/api/admin/guilds/managed/events?from=${Date.now() - 46 * 86_400_000}&to=${Date.now() - 44 * 86_400_000}&type=library&action=download&user=123`;
+      assert.equal((await request(archivedPath, memberCookie)).status, 403);
+      const archivedBody = await (await request(archivedPath, ownerCookie)).json();
+      assert.equal(archivedBody.events.length, 1);
+      assert.equal(archivedBody.events[0].username, "Archived listener");
+      assert.equal(archivedBody.events[0].trackName, "Archived song");
     } finally {
       globalThis.fetch = originalFetch;
     }

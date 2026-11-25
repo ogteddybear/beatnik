@@ -65,7 +65,12 @@ export async function countCacheFiles() {
   return count;
 }
 
-export async function downloadToCache(guildId: string, id: string, stream: Readable) {
+export async function downloadToCache(
+  guildId: string,
+  id: string,
+  stream: Readable,
+  onDownloaded?: () => void,
+) {
   // download stream to cache dir
   try {
     const targetPath = getItemPath(guildId, id);
@@ -77,6 +82,11 @@ export async function downloadToCache(guildId: string, id: string, stream: Reada
 
     const diskStream = createWriteStream(targetPath.path);
     await finished(stream.pipe(diskStream));
+    try {
+      onDownloaded?.();
+    } catch (error) {
+      console.error("Unable to record download event:", error);
+    }
 
     log({ component: "CORE", name: "CACHE", message: "Finished downloading " + id });
     return true;
@@ -101,6 +111,7 @@ export async function downloadPlaylist(
   playlist: ProviderPlaylist,
   provider: Provider,
   onProgress?: (track: ProviderTrack, index: number, total: number) => void,
+  onDownloaded?: (track: ProviderTrack) => void,
 ) {
   const tracksToDownload = playlist.tracks.filter((t) => !getItemPath(guildId, t.id).exists);
   const concurrency = 10;
@@ -114,8 +125,10 @@ export async function downloadPlaylist(
       if (!track) break;
       try {
         const stream = await provider.getStream(track.id);
-        await downloadToCache(guildId, track.id, stream);
-        onProgress?.(track, ++completed, tracksToDownload.length);
+        if (await downloadToCache(guildId, track.id, stream, () => onDownloaded?.(track))) {
+          completed++;
+          onProgress?.(track, completed, tracksToDownload.length);
+        } else errors++;
       } catch (err) {
         log({
           component: "CORE",

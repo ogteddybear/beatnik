@@ -2,7 +2,7 @@ import { logEvent } from "@/core/db/guild-events";
 import { deleteSession } from "@/core/manager";
 import type { CorePlayer } from "@/core/player";
 import { log } from "@/shared";
-import type { PlayerSubscription, VoiceConnection } from "@discordjs/voice";
+import type { AudioResource, PlayerSubscription, VoiceConnection } from "@discordjs/voice";
 import {
   AudioPlayerStatus,
   VoiceConnectionStatus,
@@ -17,22 +17,54 @@ import { createVoiceConnection } from "./connection";
 import { deleteVoiceSession } from "./manager";
 import { getNowPlayingEmbed } from "./messaging";
 
+export function trackVoiceLifecycle(
+  connection: { once(event: string, listener: () => void): unknown },
+  guildId: string,
+  channel: { id: string; name: string },
+  actor?: { userId: string; username: string },
+) {
+  const record = (action: string) => {
+    try {
+      logEvent({
+        guildId,
+        ...(action === "join" ? actor : undefined),
+        eventType: "voice",
+        action,
+        metadata: { channelId: channel.id, channelName: channel.name },
+      });
+    } catch (error) {
+      console.error("Unable to record voice event:", error);
+    }
+  };
+  connection.once(VoiceConnectionStatus.Ready, () => record("join"));
+  connection.once(VoiceConnectionStatus.Destroyed, () => record("leave"));
+}
+
 export class VoiceSession {
   private guildId: string;
   private textChannel: TextBasedChannel | null;
   private audioPlayer = createAudioPlayer();
   private subscription?: PlayerSubscription;
   private connection: VoiceConnection;
+  private resource?: AudioResource;
+  private normalizationDb = 0;
 
   constructor(
     voiceChannel: VoiceBasedChannel,
     textChannel: TextBasedChannel | null,
     corePlayer: CorePlayer,
+    actor?: { userId: string; username: string },
   ) {
     this.guildId = voiceChannel.guildId;
     this.textChannel = textChannel;
     this.connection = createVoiceConnection(voiceChannel);
     this.subscription = this.connection.subscribe(this.audioPlayer);
+    trackVoiceLifecycle(this.connection, this.guildId, voiceChannel, actor);
+    corePlayer.onVolume = (percent) => {
+      this.resource?.volume?.setVolumeDecibels(this.normalizationDb);
+      if (this.resource?.volume)
+        this.resource.volume.setVolume((this.resource.volume.volume * percent) / 100);
+    };
 
     corePlayer.onStream = async (track, inputStream) => {
       await entersState(this.connection, VoiceConnectionStatus.Ready, 10_000);
@@ -42,7 +74,11 @@ export class VoiceSession {
         inlineVolume: true,
       });
       const decibels = -(track.loudness ?? 0);
+      this.resource = resource;
+      this.normalizationDb = decibels;
       resource.volume?.setVolumeDecibels(decibels);
+      if (resource.volume)
+        resource.volume.setVolume((resource.volume.volume * corePlayer.volume) / 100);
       this.audioPlayer.play(resource);
 
       const operator = decibels >= 0 ? "+" : "";
@@ -90,10 +126,18 @@ export class VoiceSession {
       const track = corePlayer.queue.nowPlaying;
       if (track) {
         try {
-          logEvent(this.guildId, track.addedBy, "player_error", "voice", {
+          logEvent({
+            guildId: this.guildId,
+            userId: track.addedBy,
+            username: track.addedByUsername,
+            eventType: "player_error",
+            action: "voice",
             trackId: track.id,
-            providerId: track.providerId,
-            errorName: err.name,
+            trackName: track.title,
+            metadata: {
+              providerId: track.providerId,
+              errorName: err.name,
+            },
           });
         } catch (logError) {
           console.error("Unable to record voice error event:", logError);

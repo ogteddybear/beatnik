@@ -93,6 +93,19 @@ and 30-day ranges and provides a paginated, filterable activity feed. Library
 add/update/remove events are recorded from this version onward; an add counts
 a library operation, not the number of tracks. Historical library additions
 are not inferred from queued requests.
+New events snapshot the actor's username and track title when available; older
+events retain null fields rather than inventing historical names. Successful new
+cache writes log a separate `library/download` event. Voice joins/leaves, explicit
+volume changes (`/volume percent:0..200`), and clearing upcoming tracks (`/clear`,
+which leaves the current track playing) are also recorded.
+
+Raw events older than 30 days are moved on startup and every 24 hours to
+`LIBRARY_PATH/library-archive.db`. Each bounded batch copies and deletes events
+atomically using an attached SQLite database with DELETE journals; IDs and
+aggregate counters are preserved. Back up **both** the main and archive databases
+together. Historical admin queries merge both stores in timestamp/ID order, with
+cursor pagination; even short date ranges entirely before the retention boundary
+include archived events. Existing 90-day maximum query windows still apply.
 Cache files downloaded from guild library commands are stored in
 `LIBRARY_PATH/<guildId>/<trackId>.cache`. On startup, flat `.cache` and `.opus`
 files are moved to `LIBRARY_PATH/global/` and remain playable as a fallback.

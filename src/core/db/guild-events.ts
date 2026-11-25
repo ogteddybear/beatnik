@@ -10,13 +10,32 @@ export interface GuildEvent {
   action: string;
   metadata: string | null;
   created_at: number;
+  username: string | null;
+  track_name: string | null;
 }
+
+export interface EventOptions {
+  guildId: string;
+  userId?: string | null;
+  username?: string | null;
+  eventType: string;
+  action: string;
+  trackId?: string | null;
+  trackName?: string | null;
+  metadata?: object;
+}
+export const EVENT_COLUMNS =
+  "id, guild_id, user_id, event_type, action, metadata, created_at, username, track_name";
+export const EVENT_HISTORY = `(SELECT ${EVENT_COLUMNS} FROM main.GuildEvents UNION ALL SELECT ${EVENT_COLUMNS} FROM event_archive.GuildEvents)`;
+export const EVENT_RETENTION_MS = 30 * 86_400_000;
 
 type Counter = "requests" | "plays" | "skips" | "stops" | "commands_used";
 
-const insertEvent = db.prepare<[string, string | null, string, string, string | null, number]>(`
-  INSERT INTO GuildEvents (guild_id, user_id, event_type, action, metadata, created_at)
-  VALUES (?, ?, ?, ?, ?, ?)
+const insertEvent = db.prepare<
+  [string, string | null, string, string, string | null, number, string | null, string | null]
+>(`
+  INSERT INTO GuildEvents (guild_id, user_id, event_type, action, metadata, created_at, username, track_name)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
 function counterFor(eventType: string, action: string): Counter | null {
@@ -63,8 +82,10 @@ const writeEvent = db.transaction(
     action: string,
     metadata: string | null,
     createdAt: number,
+    username: string | null,
+    trackName: string | null,
   ) => {
-    insertEvent.run(guildId, userId, eventType, action, metadata, createdAt);
+    insertEvent.run(guildId, userId, eventType, action, metadata, createdAt, username, trackName);
     const counter = counterFor(eventType, action);
     if (counter) {
       const statement = increment.get(counter);
@@ -76,13 +97,9 @@ const writeEvent = db.transaction(
   },
 );
 
-export function logEvent(
-  guildId: string,
-  userId: string | null,
-  eventType: string,
-  action: string,
-  metadata?: Record<string, unknown>,
-): void {
+export function logEvent(opts: EventOptions): void {
+  const metadata =
+    opts.trackId == null ? opts.metadata : { ...opts.metadata, trackId: opts.trackId };
   let serialized: string | null = null;
   if (metadata !== undefined) {
     try {
@@ -93,11 +110,20 @@ export function logEvent(
       serialized = JSON.stringify({ error: "Metadata could not be serialized" });
     }
   }
-  writeEvent(guildId, userId, eventType, action, serialized, Date.now());
+  writeEvent(
+    opts.guildId,
+    opts.userId ?? null,
+    opts.eventType,
+    opts.action,
+    serialized,
+    Date.now(),
+    opts.username ?? null,
+    opts.trackName ?? null,
+  );
 }
 
 const latestEvents = db.prepare<[number], GuildEvent>(`
-  SELECT id, guild_id, user_id, event_type, action, metadata, created_at
+  SELECT ${EVENT_COLUMNS}
   FROM GuildEvents
   ORDER BY created_at DESC, id DESC
   LIMIT ?
@@ -155,7 +181,7 @@ export function guildEventCounts(guildId: string, from: number, to: number): Eve
   const rows = db
     .prepare<[string, number, number], { event_type: string; action: string; count: number }>(
       `
-      SELECT event_type, action, count(*) AS count FROM GuildEvents
+      SELECT event_type, action, count(*) AS count FROM ${EVENT_HISTORY}
       WHERE guild_id = ? AND created_at >= ? AND created_at < ?
       GROUP BY event_type, action
     `,
@@ -194,7 +220,13 @@ export function guildEventPage(
   guildId: string,
   filters: EventFilters,
   options: { before?: number; since?: number; limit?: number } = {},
+  archiveOnly = false,
 ): { events: GuildEvent[]; hasMore: boolean } {
+  const source = archiveOnly
+    ? "event_archive.GuildEvents"
+    : filters.from < Date.now() - EVENT_RETENTION_MS
+      ? EVENT_HISTORY
+      : "main.GuildEvents";
   const clauses = ["guild_id = ?", "created_at >= ?", "created_at < ?"];
   const values: (string | number)[] = [guildId, filters.from, filters.to];
   if (filters.eventType) {
@@ -210,24 +242,42 @@ export function guildEventPage(
     values.push(filters.userId);
   }
   if (options.before !== undefined) {
-    clauses.push("id < ?");
-    values.push(options.before);
+    const event = db
+      .prepare<[number, string], { created_at: number }>(
+        `SELECT created_at FROM ${source} WHERE id = ? AND guild_id = ?`,
+      )
+      .get(options.before, guildId);
+    if (!event) return { events: [], hasMore: false };
+    clauses.push("(created_at, id) < (?, ?)");
+    values.push(event.created_at, options.before);
   }
   if (options.since !== undefined) {
-    clauses.push("id > ?");
-    values.push(options.since);
+    const event = db
+      .prepare<[number, string], { created_at: number }>(
+        `SELECT created_at FROM ${source} WHERE id = ? AND guild_id = ?`,
+      )
+      .get(options.since, guildId);
+    if (!event) return { events: [], hasMore: false };
+    clauses.push("(created_at, id) > (?, ?)");
+    values.push(event.created_at, options.since);
   }
   const limit = Math.min(Math.max(options.limit ?? 40, 1), 50);
   values.push(limit + 1);
   const rows = db
     .prepare<(string | number)[], GuildEvent>(
       `
-      SELECT id, guild_id, user_id, event_type, action, metadata, created_at
-      FROM GuildEvents WHERE ${clauses.join(" AND ")}
-      ORDER BY id ${options.since === undefined ? "DESC" : "ASC"}
+      SELECT ${EVENT_COLUMNS}
+      FROM ${source} WHERE ${clauses.join(" AND ")}
+      ORDER BY created_at ${options.since === undefined ? "DESC" : "ASC"}, id ${options.since === undefined ? "DESC" : "ASC"}
       LIMIT ?
     `,
     )
     .all(...values);
   return { events: rows.slice(0, limit), hasMore: rows.length > limit };
+}
+
+export function getArchivedEvents(
+  filters: EventFilters & { guildId: string; before?: number; since?: number; limit?: number },
+) {
+  return guildEventPage(filters.guildId, filters, filters, true);
 }

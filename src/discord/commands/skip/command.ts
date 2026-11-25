@@ -18,7 +18,9 @@ export const execute: CommandExecuter = async (interaction) => {
 
   if (skipIndex !== null) {
     if (skipIndex >= 1 && skipIndex <= queue.tracks.length) {
-      void player.skip(interaction.user.id, skipIndex - 1).catch(console.error);
+      void player
+        .skip(interaction.user.id, skipIndex - 1, interaction.user.username)
+        .catch(console.error);
     } else {
       await interaction.reply({
         content: "Invalid track number.",
@@ -27,7 +29,9 @@ export const execute: CommandExecuter = async (interaction) => {
       return;
     }
   } else {
-    void player.skip(interaction.user.id).catch(console.error);
+    void player
+      .skip(interaction.user.id, undefined, interaction.user.username)
+      .catch(console.error);
   }
   await interaction.reply({
     content: `Skipping \`${currentSongTitle}\`...`,

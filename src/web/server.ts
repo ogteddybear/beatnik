@@ -40,7 +40,15 @@ const MANAGE_GUILD = 0x20n;
 const ADMINISTRATOR = 0x8n;
 const ADMIN_USER_ID = "258189484053495809";
 const DAY = 86_400_000;
-const EVENT_TYPES = new Set(["command", "command_error", "player", "player_error", "library"]);
+const EVENT_TYPES = new Set([
+  "command",
+  "command_error",
+  "player",
+  "player_error",
+  "library",
+  "voice",
+  "volume",
+]);
 
 type InviteSession = session.Session & {
   inviteState?: string;
@@ -208,11 +216,16 @@ function safeEventDetails(metadata: string | null): string {
       "libraryRecordId",
       "reason",
       "errorName",
+      "channelName",
+      "channelId",
+      "percent",
+      "previous",
+      "removedCount",
     ] as const;
     const details = fields.flatMap((field) => {
       const entry = (value as Record<string, unknown>)[field];
       return (typeof entry === "string" && entry.length <= 128) ||
-        ((field === "count" || field === "libraryRecordId") &&
+        (["count", "libraryRecordId", "percent", "previous", "removedCount"].includes(field) &&
           typeof entry === "number" &&
           Number.isSafeInteger(entry))
         ? [`${field}: ${entry}`]
@@ -544,9 +557,13 @@ export function createWebServer(client: Client) {
       events: page.events.map((event) => ({
         id: event.id,
         time: new Date(event.created_at).toISOString(),
-        user: event.user_id
-          ? (client.users.cache.get(event.user_id)?.username ?? event.user_id)
-          : "System",
+        user:
+          event.username ??
+          (event.user_id
+            ? (client.users.cache.get(event.user_id)?.username ?? event.user_id)
+            : "System"),
+        username: event.username,
+        trackName: event.track_name,
         userId: event.user_id,
         eventType: event.event_type,
         action: event.action,

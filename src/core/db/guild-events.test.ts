@@ -10,7 +10,7 @@ test("guild events are filtered, ordered, and paginated without crossing guilds"
   process.env.CLIENT_ID = "123456789012345678";
   process.env.LIBRARY_PATH = directory;
   process.env.DATABASE_URL = path.join(directory, "library.db");
-  const { db } = await import("./client");
+  const { db, archiveDb } = await import("./client");
   try {
     const { guildEventCounts, guildEventPage, recentGuildCounts } = await import("./guild-events");
     const insert = db.prepare(
@@ -63,6 +63,7 @@ test("guild events are filtered, ordered, and paginated without crossing guilds"
     assert.equal(guildEventCounts("a", 0, 4_000).plays, 0);
   } finally {
     db.close();
+    archiveDb.close();
     await rm(directory, { recursive: true, force: true });
   }
 });

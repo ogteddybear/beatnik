@@ -7,6 +7,7 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "test": "tsx --test \"src/**/*.test.ts\"",
     "build": "pnpm typecheck && tsdown",
     "dev": "tsx watch src/index.ts",
     "format": "prettier --write .",

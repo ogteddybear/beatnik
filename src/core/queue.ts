@@ -13,6 +13,7 @@ export function shuffleArray<T>(array: T[]) {
 
 export interface QueuedTrack extends ProviderTrack {
   addedBy: string;
+  addedByUsername?: string;
 }
 
 export class Queue {

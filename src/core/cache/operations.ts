@@ -1,6 +1,7 @@
 import type { Provider, ProviderPlaylist, ProviderTrack } from "@/providers";
 import { log } from "@/shared";
 
+import { logEvent } from "../db/guild-events";
 import { playlists } from "../db/playlist";
 import { tracks } from "../db/track";
 import { providers } from "../manager";
@@ -20,6 +21,22 @@ export interface LibraryOperationResult {
   error?: "EXISTS";
   completed: number;
   errors: number;
+}
+export interface LibraryActor {
+  userId: string;
+  username: string;
+}
+function recordDownload(guildId: string, actor?: LibraryActor) {
+  return (track: ProviderTrack) =>
+    logEvent({
+      guildId,
+      ...actor,
+      eventType: "library",
+      action: "download",
+      trackId: track.id,
+      trackName: track.title,
+      metadata: { providerId: track.providerId },
+    });
 }
 
 export async function testLibraryConnection() {
@@ -55,6 +72,7 @@ export async function addTrackToLibrary(
   guildId: string,
   track: ProviderTrack,
   provider: Provider,
+  actor?: LibraryActor,
 ): Promise<LibraryOperationResult> {
   // add track to db and save file
   const existingTrack = tracks.get(track.id);
@@ -69,7 +87,11 @@ export async function addTrackToLibrary(
   }
   try {
     const stream = await provider.getStream(track.id);
-    if (!(await downloadToCache(guildId, track.id, stream))) {
+    if (
+      !(await downloadToCache(guildId, track.id, stream, () =>
+        recordDownload(guildId, actor)(track),
+      ))
+    ) {
       return { added: false, completed: 0, errors: 1 };
     }
     // only create track in db if download succeeds
@@ -104,6 +126,7 @@ export async function addPlaylistToLibrary(
   playlistData: ProviderPlaylist,
   provider: Provider,
   onProgress?: (track: ProviderTrack, index: number, total: number) => void,
+  actor?: LibraryActor,
 ): Promise<LibraryOperationResult> {
   const playlistExists = playlists.exists(playlistData.id);
   if (playlistExists) {
@@ -111,7 +134,13 @@ export async function addPlaylistToLibrary(
   } else {
     playlists.create(playlistData);
   }
-  const { completed, errors } = await downloadPlaylist(guildId, playlistData, provider, onProgress);
+  const { completed, errors } = await downloadPlaylist(
+    guildId,
+    playlistData,
+    provider,
+    onProgress,
+    recordDownload(guildId, actor),
+  );
   return {
     added: !playlistExists,
     updated: playlistExists,
@@ -124,6 +153,7 @@ export async function updatePlaylistInLibrary(
   guildId: string,
   playlistIntId: number,
   onProgress?: (track: ProviderTrack, index: number, total: number) => void,
+  actor?: LibraryActor,
 ) {
   const existingPlaylistData = playlists.getInfo(playlistIntId);
   if (!existingPlaylistData) throw new Error(`${playlistIntId} Playlist does not exist`);
@@ -152,7 +182,7 @@ export async function updatePlaylistInLibrary(
   }
 
   return {
-    operation: await addPlaylistToLibrary(guildId, freshMetadata, provider, onProgress),
+    operation: await addPlaylistToLibrary(guildId, freshMetadata, provider, onProgress, actor),
     playlistData: freshMetadata,
   };
 }

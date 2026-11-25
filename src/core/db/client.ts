@@ -1,9 +1,28 @@
 import Database from "better-sqlite3";
+import { mkdirSync } from "node:fs";
+import path from "node:path";
 
 import { config } from "../config";
-import { runMigrations } from "./migrations";
+import { ensureGuildEventColumns, runMigrations } from "./migrations";
 
 const url = config.databaseUrl;
+export const archivePath = path.join(config.libraryPath, "library-archive.db");
+const eventSchema = `
+  CREATE TABLE IF NOT EXISTS GuildEvents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT,
+    user_id TEXT,
+    event_type TEXT,
+    action TEXT,
+    metadata TEXT,
+    created_at INTEGER,
+    username TEXT,
+    track_name TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_guild_events_latest ON GuildEvents (created_at DESC, id DESC);
+  CREATE INDEX IF NOT EXISTS idx_guild_events_guild_date ON GuildEvents (guild_id, created_at DESC, id DESC);
+  CREATE INDEX IF NOT EXISTS idx_guild_events_guild_id ON GuildEvents (guild_id, id DESC);
+`;
 
 const tableInit = `
   CREATE TABLE IF NOT EXISTS Playlist (
@@ -54,7 +73,9 @@ const tableInit = `
     event_type  TEXT,
     action      TEXT,
     metadata    TEXT,
-    created_at  INTEGER
+    created_at  INTEGER,
+    username    TEXT,
+    track_name  TEXT
   );
 
   CREATE INDEX IF NOT EXISTS idx_guild_events_latest
@@ -77,3 +98,10 @@ async function getDatabaseClient() {
 }
 
 export const db = await getDatabaseClient();
+mkdirSync(config.libraryPath, { recursive: true });
+export const archiveDb = new Database(archivePath);
+archiveDb.pragma("journal_mode = DELETE");
+archiveDb.exec(eventSchema);
+ensureGuildEventColumns(archiveDb);
+// DELETE journals enable atomic commits across attached files on this disk.
+db.prepare("ATTACH DATABASE ? AS event_archive").run(archivePath);

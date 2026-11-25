@@ -30,9 +30,13 @@ export const execute: CommandExecuter = async (interaction) => {
       metadata,
       provider,
       createDownloadProgressHandler(interaction),
+      { userId: interaction.user.id, username: interaction.user.username },
     );
   } else if (type === "track" || type === "search") {
-    operation = await addTrackToLibrary(guildId, metadata, provider);
+    operation = await addTrackToLibrary(guildId, metadata, provider, {
+      userId: interaction.user.id,
+      username: interaction.user.username,
+    });
   } else {
     operation = null;
   }
@@ -46,11 +50,19 @@ export const execute: CommandExecuter = async (interaction) => {
   } else {
     if (operation.completed > 0) {
       try {
-        logEvent(guildId, interaction.user.id, "library", "add", {
-          providerId: provider.id,
-          trackId: type === "playlist" ? undefined : metadata.id,
-          playlistId: type === "playlist" ? metadata.id : undefined,
-          count: operation.completed,
+        logEvent({
+          guildId,
+          userId: interaction.user.id,
+          username: interaction.user.username,
+          eventType: "library",
+          action: "add",
+          trackName: type === "playlist" ? undefined : metadata.title,
+          metadata: {
+            providerId: provider.id,
+            trackId: type === "playlist" ? undefined : metadata.id,
+            playlistId: type === "playlist" ? metadata.id : undefined,
+            count: operation.completed,
+          },
         });
       } catch (error) {
         console.error("Unable to record library event:", error);

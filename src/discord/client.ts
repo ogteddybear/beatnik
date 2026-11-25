@@ -26,8 +26,15 @@ async function handleInteraction(interaction: Interaction) {
       console.error(err);
       if (interaction.guildId) {
         try {
-          logEvent(interaction.guildId, interaction.user.id, "command_error", "autocomplete", {
-            command: interaction.commandName,
+          logEvent({
+            guildId: interaction.guildId,
+            userId: interaction.user.id,
+            username: interaction.user.username,
+            eventType: "command_error",
+            action: "autocomplete",
+            metadata: {
+              command: interaction.commandName,
+            },
           });
         } catch (logError) {
           console.error("Unable to record autocomplete error event:", logError);
@@ -47,7 +54,13 @@ async function handleInteraction(interaction: Interaction) {
     });
     if (interaction.guildId) {
       try {
-        logEvent(interaction.guildId, interaction.user.id, "command", interaction.commandName);
+        logEvent({
+          guildId: interaction.guildId,
+          userId: interaction.user.id,
+          username: interaction.user.username,
+          eventType: "command",
+          action: interaction.commandName,
+        });
       } catch (logError) {
         console.error("Unable to record command event:", logError);
       }
@@ -58,15 +71,16 @@ async function handleInteraction(interaction: Interaction) {
       console.error(err);
       if (interaction.guildId) {
         try {
-          logEvent(
-            interaction.guildId,
-            interaction.user.id,
-            "command_error",
-            interaction.commandName,
-            {
+          logEvent({
+            guildId: interaction.guildId,
+            userId: interaction.user.id,
+            username: interaction.user.username,
+            eventType: "command_error",
+            action: interaction.commandName,
+            metadata: {
               errorName: err instanceof Error ? err.name : "UnknownError",
             },
-          );
+          });
         } catch (logError) {
           console.error("Unable to record command error event:", logError);
         }

@@ -15,7 +15,20 @@ interface ColumnInfo {
   pk: number;
 }
 
+export function ensureGuildEventColumns(db: Database): void {
+  const columns = new Set(
+    db
+      .prepare<[], ColumnInfo>("PRAGMA table_info(GuildEvents)")
+      .all()
+      .map((column) => column.name),
+  );
+  for (const name of ["username", "track_name"]) {
+    if (!columns.has(name)) db.exec(`ALTER TABLE GuildEvents ADD COLUMN ${name} TEXT`);
+  }
+}
+
 const migrations: Migration[] = [
+  // Keep new migrations at the end: existing installations retain event data.
   {
     name: "001_loudness_nullable_and_real",
     up: (db) => {
@@ -81,6 +94,7 @@ const migrations: Migration[] = [
       }
     },
   },
+  { name: "004_guild_event_names", up: ensureGuildEventColumns },
 ];
 
 export function runMigrations(db: Database): void {

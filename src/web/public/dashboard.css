@@ -471,6 +471,29 @@ a.server-card-title:hover {
   text-align: center;
   color: var(--text-secondary);
 }
+.event-badge {
+  display: inline-block;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-control);
+  color: var(--accent);
+  background: var(--surface-hover);
+  font-size: var(--text-xs);
+}
+.event-badge[data-kind="voice"] {
+  color: var(--accent);
+}
+.event-badge[data-kind="volume"] {
+  color: var(--warning);
+  background: var(--warning-surface);
+}
+.event-badge[data-kind="download"] {
+  color: var(--success);
+  background: var(--success-surface);
+}
+.event-badge[data-kind$="_error"] {
+  color: var(--error);
+  background: var(--error-surface);
+}
 @media (max-width: 575.98px) {
   .page-container {
     padding-block: var(--space-8);
