@@ -71,10 +71,18 @@ the invite explicitly requests `bot`, `applications.commands`, and `identify`
 with the authorization code flow. The callback exchanges the one-time code,
 does not display tokens, and validates a session-bound state. Registration is a
 manual portal step; changing application settings is not done by this repo.
-If Discord's token response does not include a guild object, the result page
-reports authorization as completed but membership unconfirmed rather than
-claiming an installation. The bot's default standalone invite links are not
-changed by this flow.
+Installation confirmation uses a guild in Discord's token response, the bot's
+gateway cache, or a bot-authenticated guild lookup. It does not infer membership
+from the OAuth scope string (Discord can return an empty scope for a successful
+bot install). The callback's `guild_id` is only a hint until membership is checked.
+Missing cache entries, temporary API failures, and interrupted code exchanges
+remain pending rather than prompting another invite. The result page rechecks
+the session-bound receipt for up to two minutes, pauses while hidden, and offers
+a manual confirmation check. REST checks are throttled and receipts expire after
+ten minutes without converting an unknown installation into a failure. Explicit
+Discord denial, invalid/expired callbacks, and authorization errors have distinct
+messages. No codes or tokens are stored in the receipt or logged. The bot's
+default standalone invite links are not changed by this flow.
 
 The dashboard listens on `PORT` (default `8080`). On Fly, set the OAuth credentials and
 `SESSION_SECRET` as secrets. Users see servers they can manage where the bot is present;

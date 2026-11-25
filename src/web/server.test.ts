@@ -168,7 +168,7 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
     const invalidResult = await fetch(`${origin}/invite/result`, {
       headers: { Cookie: inviteCookie },
     });
-    assert.match(await invalidResult.text(), /could not be confirmed/);
+    assert.match(await invalidResult.text(), /couldn’t verify this callback/);
     const retry = await fetch(`${origin}/invite`, {
       headers: { Cookie: inviteCookie },
       redirect: "manual",
@@ -196,11 +196,11 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
     );
     assert.equal(denied.headers.get("location"), "/invite/result");
     const cancelled = await fetch(`${origin}/invite/result`, { headers: { Cookie: inviteCookie } });
-    assert.match(await cancelled.text(), /installation was cancelled/);
+    assert.match(await cancelled.text(), /authorization was cancelled/);
     const replay = await fetch(`${origin}/invite/callback?state=${deniedState}&code=secret-code`, {
       headers: { Cookie: inviteCookie },
     });
-    assert.match(await replay.text(), /could not be confirmed/);
+    assert.match(await replay.text(), /couldn’t verify this callback/);
 
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async (url: string | URL | Request, options?: RequestInit) => {
@@ -214,7 +214,7 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
         assert.equal(body.get("redirect_uri"), "http://localhost:8080/invite/callback");
         return Response.json({
           scope: "bot applications.commands identify",
-          guild: { id: "managed" },
+          access_token: "test-access",
         });
       }
       return originalFetch(url, options);
@@ -235,7 +235,7 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
       const result = await originalFetch(`${origin}/invite/result`, {
         headers: { Cookie: inviteCookie },
       });
-      assert.match(await result.text(), /Authorization completed/);
+      assert.match(await result.text(), /authorization completed/i);
 
       const cookieFor = (id: string) => {
         const sid = `test-${id}`;

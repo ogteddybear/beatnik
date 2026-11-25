@@ -2,13 +2,18 @@
 <html lang="en" data-bs-theme="dark">
   <head>
     <%- include('head', { title: 'Sashimi · Bot installation', live: false }) %>
+    <% if (typeof canCheck !== 'undefined' && canCheck) { %><script src="/static/invite-status.js" defer></script><% } %>
   </head>
   <body class="d-flex min-vh-100 align-items-center justify-content-center">
     <main class="container page-container">
       <div class="card dashboard-card result-card mx-auto text-center p-4 p-md-5">
         <div class="brand-mark mx-auto mb-4" aria-hidden="true">♫</div>
-        <h1 class="h2 fw-bold mb-3">Adding Sashimi</h1>
-        <p class="text-secondary mb-4" role="status"><%= message %></p>
+        <h1 id="invite-title" class="h2 fw-bold mb-3"><%= typeof title === 'string' ? title : 'Adding Sashimi' %></h1>
+        <p id="invite-message" class="text-secondary mb-4" role="status" aria-live="polite"><%= message %></p>
+        <% if (typeof canCheck !== 'undefined' && canCheck) { %>
+          <p id="invite-check-status" class="small text-secondary">Checking for confirmation automatically…</p>
+          <button id="invite-check" class="btn btn-outline-light mb-3" type="button">Check confirmation</button>
+        <% } %>
         <a class="btn btn-primary" href="<%= isAuthenticated ? '/dashboard' : '/' %>"><%= isAuthenticated ? 'View dashboard' : 'Return to Sashimi' %></a>
       </div>
     </main>

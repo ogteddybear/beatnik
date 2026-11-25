@@ -16,6 +16,14 @@ import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import passport from "passport";
 
+import {
+  INVITE_CONFIRMATION_TTL,
+  type InviteResult,
+  createInviteVerifier,
+  discordGuildId,
+  invitePresentation,
+} from "./invite";
+
 interface DashboardUser {
   id: string;
   username: string;
@@ -37,7 +45,7 @@ const EVENT_TYPES = new Set(["command", "command_error", "player", "player_error
 type InviteSession = session.Session & {
   inviteState?: string;
   inviteIssuedAt?: number;
-  inviteResult?: "success" | "pending" | "cancelled" | "failed";
+  inviteResult?: InviteResult;
 };
 
 export function canManageGuild(permissions: string): boolean {
@@ -186,16 +194,6 @@ async function guildSummaries(guilds: ReturnType<typeof authorizedGuilds>) {
   );
 }
 
-function inviteMessage(result: InviteSession["inviteResult"]) {
-  if (result === "success")
-    return "Authorization completed. Sashimi should appear in your server shortly.";
-  if (result === "pending")
-    return "Authorization completed, but server membership has not been confirmed yet. Check your dashboard shortly.";
-  if (result === "cancelled") return "Bot installation was cancelled. No changes were made here.";
-  if (result === "failed") return "Bot installation could not be confirmed. Please try again.";
-  return "Start from the Invite Sashimi button to install the bot.";
-}
-
 function safeEventDetails(metadata: string | null): string {
   if (!metadata) return "—";
   try {
@@ -235,6 +233,7 @@ export function createWebServer(client: Client) {
   const production = process.env.NODE_ENV === "production";
   const auth = new passport.Passport();
   const SQLiteStoreFactory = SQLiteStore(session);
+  const verifyInvite = createInviteVerifier(client, config.discord.token);
 
   auth.use(
     new DiscordStrategy(
@@ -298,6 +297,7 @@ export function createWebServer(client: Client) {
     const inviteSession = req.session as InviteSession;
     inviteSession.inviteState = state;
     inviteSession.inviteIssuedAt = Date.now();
+    delete inviteSession.inviteResult;
     const authorize = new URL("https://discord.com/oauth2/authorize");
     authorize.search = new URLSearchParams({
       response_type: "code",
@@ -328,22 +328,33 @@ export function createWebServer(client: Client) {
       !issuedAt ||
       Date.now() - issuedAt < 0 ||
       Date.now() - issuedAt > 10 * 60_000 ||
+      !/^[a-f0-9]{64}$/.test(received) ||
       received.length !== expected.length ||
       !timingSafeEqual(Buffer.from(received), Buffer.from(expected)) ||
       req.query.iss !== "https://discord.com"
     ) {
-      inviteSession.inviteResult = "failed";
+      if (!["confirmed", "pending"].includes(inviteSession.inviteResult?.status ?? "")) {
+        inviteSession.inviteResult = { status: "invalid", createdAt: Date.now() };
+      }
       return res.redirect("/invite/result");
     }
+    // Persist nonce consumption before making any external request.
+    await new Promise<void>((resolve, reject) =>
+      req.session.save((error) => (error ? reject(error) : resolve())),
+    );
+    const result: InviteResult = { status: "pending", createdAt: Date.now() };
+    inviteSession.inviteResult = result;
     if (req.query.error === "access_denied") {
-      inviteSession.inviteResult = "cancelled";
+      result.status = "cancelled";
     } else if (req.query.error !== undefined) {
-      inviteSession.inviteResult = "failed";
+      result.status = "failed";
     } else {
       const code = queryString(req.query.code);
       if (!code || code.length > 2048) {
-        inviteSession.inviteResult = "failed";
+        result.status = "failed";
       } else {
+        // Discord documents this parameter as a hint, not membership proof.
+        result.guildId = discordGuildId(req.query.guild_id);
         try {
           const response = await fetch("https://discord.com/api/oauth2/token", {
             method: "POST",
@@ -355,29 +366,79 @@ export function createWebServer(client: Client) {
               code,
               redirect_uri: inviteCallback,
             }),
+            signal: AbortSignal.timeout(5_000),
           });
           // Never put the exchange response, code, or credentials in logs or templates.
-          const token = response.ok
-            ? ((await response.json()) as { scope?: string; guild?: { id?: string } })
-            : null;
-          inviteSession.inviteResult = token?.scope?.split(" ").includes("bot")
-            ? token.guild?.id
-              ? "success"
-              : "pending"
-            : "failed";
+          const token: unknown = response.ok ? await response.json() : null;
+          if (
+            token &&
+            typeof token === "object" &&
+            "access_token" in token &&
+            typeof token.access_token === "string" &&
+            token.access_token
+          ) {
+            result.authorizationComplete = true;
+            if (
+              "guild" in token &&
+              token.guild &&
+              typeof token.guild === "object" &&
+              "id" in token.guild
+            ) {
+              const confirmedGuild = discordGuildId(token.guild.id);
+              if (confirmedGuild) {
+                // A guild in Discord's server-to-server token response is proof,
+                // unlike the editable guild_id callback query parameter.
+                result.guildId = confirmedGuild;
+                result.status = "confirmed";
+              }
+            }
+          }
         } catch {
-          inviteSession.inviteResult = "failed";
+          // The code exchange can fail after the bot was added. Stay pending.
         }
+        await verifyInvite(result);
       }
     }
     return res.redirect("/invite/result");
   });
-  app.get("/invite/result", (req, res) => {
+  app.get("/invite/result", async (req, res) => {
     res.set("Cache-Control", "private, no-store");
+    res.set("Referrer-Policy", "no-referrer");
     const inviteSession = req.session as InviteSession;
-    const message = inviteMessage(inviteSession.inviteResult);
-    delete inviteSession.inviteResult;
-    return res.render("invite-result", { message, isAuthenticated: req.isAuthenticated() });
+    await verifyInviteResult(inviteSession);
+    return res.render("invite-result", {
+      ...invitePresentation(inviteSession.inviteResult),
+      canCheck: canCheckInvite(inviteSession.inviteResult),
+      isAuthenticated: req.isAuthenticated(),
+    });
+  });
+  function canCheckInvite(result?: InviteResult) {
+    return Boolean(
+      result?.status === "pending" &&
+      result.guildId &&
+      Date.now() >= result.createdAt &&
+      Date.now() - result.createdAt < INVITE_CONFIRMATION_TTL,
+    );
+  }
+  async function verifyInviteResult(inviteSession: InviteSession) {
+    // Older deployed sessions stored a string result instead of a receipt.
+    if (inviteSession.inviteResult && typeof inviteSession.inviteResult !== "object") {
+      delete inviteSession.inviteResult;
+    }
+    if (inviteSession.inviteResult) await verifyInvite(inviteSession.inviteResult);
+  }
+  app.get("/api/invite/status", async (req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    res.set("Referrer-Policy", "no-referrer");
+    const inviteSession = req.session as InviteSession;
+    await verifyInviteResult(inviteSession);
+    // No guild ID query accepted; this endpoint can only check the receipt in
+    // this browser's session. It grants no dashboard or event-log access.
+    return res.json({
+      ...invitePresentation(inviteSession.inviteResult),
+      status: inviteSession.inviteResult?.status ?? "none",
+      canCheck: canCheckInvite(inviteSession.inviteResult),
+    });
   });
 
   async function visibleGuilds(req: express.Request) {
