@@ -59,6 +59,12 @@ const tableInit = `
 
   CREATE INDEX IF NOT EXISTS idx_guild_events_latest
     ON GuildEvents (created_at DESC, id DESC);
+
+  CREATE INDEX IF NOT EXISTS idx_guild_events_guild_date
+    ON GuildEvents (guild_id, created_at DESC, id DESC);
+
+  CREATE INDEX IF NOT EXISTS idx_guild_events_guild_id
+    ON GuildEvents (guild_id, id DESC);
 `;
 
 async function getDatabaseClient() {

@@ -1,4 +1,5 @@
 import { updatePlaylistInLibrary } from "@/core/cache/operations";
+import { logEvent } from "@/core/db/guild-events";
 import { playlists } from "@/core/db/playlist";
 import type { AutocompleteHandler, CommandExecuter } from "@/discord/commands";
 import { createDownloadProgressHandler } from "@/discord/playback";
@@ -18,6 +19,16 @@ export async function updatePlaylistWithInteraction(
   if (!update || !update.operation) {
     await interaction.editReply("Something went wrong.");
   } else {
+    if (update.operation.completed > 0) {
+      try {
+        logEvent(guildId, interaction.user.id, "library", "update", {
+          playlistId: update.playlistData.id,
+          count: update.operation.completed,
+        });
+      } catch (error) {
+        console.error("Unable to record library event:", error);
+      }
+    }
     await interaction.editReply(
       `Updated ${update.operation.completed} tracks (${update.operation.errors} errors) in \`${update.playlistData.title}\``,
     );

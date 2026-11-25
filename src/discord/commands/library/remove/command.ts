@@ -1,4 +1,5 @@
 import { deletePlaylistFromLibrary, deleteTrackFromLibrary } from "@/core/cache/operations";
+import { logEvent } from "@/core/db/guild-events";
 import { playlists } from "@/core/db/playlist";
 import { tracks } from "@/core/db/track";
 import { getSession } from "@/core/manager";
@@ -50,6 +51,11 @@ export const execute: CommandExecuter = async (interaction) => {
     const int_id = interaction.options.getInteger("playlist-name", true);
     const operation = await deletePlaylistFromLibrary(guildId, int_id);
     if (operation) {
+      try {
+        logEvent(guildId, interaction.user.id, "library", "remove", { libraryRecordId: int_id });
+      } catch (error) {
+        console.error("Unable to record library event:", error);
+      }
       await interaction.reply({
         content: `${inlineCode(operation.title)} was removed.`,
       });
@@ -61,6 +67,13 @@ export const execute: CommandExecuter = async (interaction) => {
   } else if (subcommand === "saved-track") {
     const int_id = interaction.options.getInteger("track-name", true);
     const removedTrack = await deleteTrackFromLibrary(guildId, int_id);
+    if (removedTrack) {
+      try {
+        logEvent(guildId, interaction.user.id, "library", "remove", { libraryRecordId: int_id });
+      } catch (error) {
+        console.error("Unable to record library event:", error);
+      }
+    }
     await interaction.reply({
       content: `${inlineCode(removedTrack?.title ?? "")} was removed.`,
     });

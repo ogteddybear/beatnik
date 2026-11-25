@@ -61,10 +61,30 @@ Change `/path/on/your/computer` to a directory where Sashimi's files can live, s
 | `DISCORD_REDIRECT_URI` | Discord OAuth2 redirect URL; for Fly, `https://dis.sashimi.zip/auth/callback`. Register this URL in the Discord developer portal. |
 | `SESSION_SECRET` | A long, random secret used to sign dashboard session cookies. Keep private. |
 
+For bot installation to return to Sashimi, register
+`https://dis.sashimi.zip/invite/callback` under **Discord Developer Portal →
+Application → OAuth2 → Redirects** (in addition to the existing login redirect
+`https://dis.sashimi.zip/auth/callback`). The installation callback URL is built
+from the origin of `DISCORD_REDIRECT_URI`, so register `<same origin>/invite/callback`
+when using a different host. Configure the application for **Guild Install**;
+the invite explicitly requests `bot`, `applications.commands`, and `identify`
+with the authorization code flow. The callback exchanges the one-time code,
+does not display tokens, and validates a session-bound state. Registration is a
+manual portal step; changing application settings is not done by this repo.
+If Discord's token response does not include a guild object, the result page
+reports authorization as completed but membership unconfirmed rather than
+claiming an installation. The bot's default standalone invite links are not
+changed by this flow.
+
 The dashboard listens on `PORT` (default `8080`). On Fly, set the OAuth credentials and
 `SESSION_SECRET` as secrets. Users see servers they can manage where the bot is present;
 the configured admin sees all bot servers. Requests, plays, skips, stops, commands,
 and raw events are tracked from this version onward (existing usage is not backfilled).
+The owner-only server detail view groups recorded events into 24-hour, 7-day,
+and 30-day ranges and provides a paginated, filterable activity feed. Library
+add/update/remove events are recorded from this version onward; an add counts
+a library operation, not the number of tracks. Historical library additions
+are not inferred from queued requests.
 Cache files downloaded from guild library commands are stored in
 `LIBRARY_PATH/<guildId>/<trackId>.cache`. On startup, flat `.cache` and `.opus`
 files are moved to `LIBRARY_PATH/global/` and remain playable as a fallback.

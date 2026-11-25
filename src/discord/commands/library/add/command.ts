@@ -1,5 +1,6 @@
 import type { LibraryOperationResult } from "@/core/cache/operations";
 import { addPlaylistToLibrary, addTrackToLibrary } from "@/core/cache/operations";
+import { logEvent } from "@/core/db/guild-events";
 import { resolveQuery } from "@/core/resolvers";
 import type { CommandExecuter } from "@/discord/commands";
 import { createDownloadProgressHandler } from "@/discord/playback";
@@ -43,6 +44,18 @@ export const execute: CommandExecuter = async (interaction) => {
   } else if (operation.error === "EXISTS") {
     await interaction.editReply(`${title} was already added.`);
   } else {
+    if (operation.completed > 0) {
+      try {
+        logEvent(guildId, interaction.user.id, "library", "add", {
+          providerId: provider.id,
+          trackId: type === "playlist" ? undefined : metadata.id,
+          playlistId: type === "playlist" ? metadata.id : undefined,
+          count: operation.completed,
+        });
+      } catch (error) {
+        console.error("Unable to record library event:", error);
+      }
+    }
     await interaction.editReply(
       `${operation.updated ? "Updated" : "Added"} ${operation.completed} tracks (${operation.errors} errors) for \`${title ?? "unknown"}\``,
     );
