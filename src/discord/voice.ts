@@ -1,3 +1,4 @@
+import { logEvent } from "@/core/db/guild-events";
 import { deleteSession } from "@/core/manager";
 import type { CorePlayer } from "@/core/player";
 import { log } from "@/shared";
@@ -87,7 +88,18 @@ export class VoiceSession {
     this.audioPlayer.on(AudioPlayerStatus.Idle, () => corePlayer.next());
     this.audioPlayer.on("error", (err) => {
       const track = corePlayer.queue.nowPlaying;
-      if (track) corePlayer.onError?.(track, err);
+      if (track) {
+        try {
+          logEvent(this.guildId, track.addedBy, "player_error", "voice", {
+            trackId: track.id,
+            providerId: track.providerId,
+            errorName: err.name,
+          });
+        } catch (logError) {
+          console.error("Unable to record voice error event:", logError);
+        }
+        corePlayer.onError?.(track, err);
+      }
     });
   }
 

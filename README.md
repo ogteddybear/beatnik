@@ -62,8 +62,12 @@ Change `/path/on/your/computer` to a directory where Sashimi's files can live, s
 | `SESSION_SECRET` | A long, random secret used to sign dashboard session cookies. Keep private. |
 
 The dashboard listens on `PORT` (default `8080`). On Fly, set the OAuth credentials and
-`SESSION_SECRET` as secrets. The library and audio cache currently have no guild ownership;
-the dashboard therefore shows global storage only, not per-server usage.
+`SESSION_SECRET` as secrets. Users see servers they can manage where the bot is present;
+the configured admin sees all bot servers. Requests, plays, skips, stops, commands,
+and raw events are tracked from this version onward (existing usage is not backfilled).
+Per-server storage is an estimate
+of cached tracks requested by that server, not exclusive disk usage: cached files can
+be shared by multiple servers, and files downloaded but never queued are not included.
 Dashboard sessions are stored in `LIBRARY_PATH/sessions.db` (on Fly's `/data` volume),
 so sessions persist across deploys. `connect-sqlite3` requires the separate `sqlite3`
 runtime driver; it does not use Sashimi's `better-sqlite3` database connection.

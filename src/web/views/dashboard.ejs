@@ -15,36 +15,32 @@
         <div class="d-flex align-items-center gap-3">
           <img class="avatar" src="<%= avatarUrl %>" alt="" width="36" height="36" />
           <span class="d-none d-sm-inline"><%= username %></span>
+          <% if (isAdmin) { %>
+            <a class="btn btn-outline-light btn-sm" href="/admin">Admin</a>
+          <% } %>
           <a class="btn btn-outline-light btn-sm" href="/logout">Log out</a>
         </div>
       </div>
     </nav>
 
     <main class="container py-5">
-      <header class="mb-5">
-        <p class="text-primary text-uppercase fw-semibold small mb-2">Your dashboard</p>
-        <h1 class="display-6 fw-bold">Welcome back, <%= username %></h1>
-        <p class="text-secondary mb-0">Servers you share with Sashimi and your bot's global storage.</p>
-      </header>
-
-      <section aria-labelledby="storage-heading" class="mb-5">
-        <div class="card dashboard-card p-4">
-          <p class="text-secondary mb-2" id="storage-heading">Global bot storage</p>
-          <p class="display-6 fw-bold mb-2"><%= storageUsed %></p>
-          <p class="text-secondary small mb-0">
-            Audio cache and SQLite database across all servers. This is not a per-server total.
-          </p>
+      <header class="d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-3 mb-5">
+        <div>
+          <p class="text-primary text-uppercase fw-semibold small mb-2">Your dashboard</p>
+          <h1 class="display-6 fw-bold">Welcome back, <%= username %></h1>
+          <p class="text-secondary mb-0">Servers you manage where Sashimi is installed.</p>
         </div>
-      </section>
+        <a class="btn btn-primary btn-lg" href="<%= inviteUrl %>">Invite Sashimi</a>
+      </header>
 
       <section aria-labelledby="servers-heading">
         <div class="d-flex align-items-baseline justify-content-between mb-3">
-          <h2 class="h4 fw-bold" id="servers-heading">Mutual servers</h2>
+          <h2 class="h4 fw-bold" id="servers-heading">Your servers</h2>
           <span class="text-secondary"><%= guilds.length %> total</span>
         </div>
         <% if (guilds.length === 0) { %>
           <div class="card dashboard-card p-4 text-secondary">
-            No shared servers found. Add Sashimi to a server you belong to, then refresh this page.
+            No eligible servers found. Manage a server where Sashimi is installed, or invite Sashimi to one.
           </div>
         <% } else { %>
           <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
@@ -59,7 +55,35 @@
                     <% } %>
                     <h3 class="h5 fw-semibold mb-0 text-break"><%= guild.name %></h3>
                   </div>
-                  <p class="small text-secondary mb-0">Storage metrics per server coming soon.</p>
+                  <div class="row row-cols-2 row-cols-md-3 g-3 text-center mb-3">
+                    <div class="col">
+                      <p class="h5 fw-semibold mb-0"><%= guild.plays %></p>
+                      <p class="small text-secondary mb-0">Plays</p>
+                    </div>
+                    <div class="col">
+                      <p class="h5 fw-semibold mb-0"><%= guild.requests %></p>
+                      <p class="small text-secondary mb-0">Requests</p>
+                    </div>
+                    <div class="col">
+                      <p class="h5 fw-semibold mb-0"><%= guild.storageUsed %></p>
+                      <p class="small text-secondary mb-0">Storage</p>
+                    </div>
+                    <div class="col">
+                      <p class="h5 fw-semibold mb-0"><%= guild.skips %></p>
+                      <p class="small text-secondary mb-0">Skips</p>
+                    </div>
+                    <div class="col">
+                      <p class="h5 fw-semibold mb-0"><%= guild.stops %></p>
+                      <p class="small text-secondary mb-0">Stops</p>
+                    </div>
+                    <div class="col">
+                      <p class="h5 fw-semibold mb-0"><%= guild.commands %></p>
+                      <p class="small text-secondary mb-0">Commands</p>
+                    </div>
+                  </div>
+                  <p class="small text-secondary mb-0">
+                    Estimated cached audio requested by this server. Shared files may count for multiple servers.
+                  </p>
                 </article>
               </div>
             <% } %>

@@ -40,7 +40,7 @@ export function getOrCreateSession(guildId: string): GuildSession {
   let session = sessions.get(guildId);
   if (!session) {
     const queue = new Queue();
-    const player = new CorePlayer(queue, providers);
+    const player = new CorePlayer(guildId, queue, providers);
     session = { queue, player };
     sessions.set(guildId, session);
   }

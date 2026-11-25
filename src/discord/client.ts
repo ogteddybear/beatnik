@@ -1,4 +1,5 @@
 import { config } from "@/core/config";
+import { logEvent } from "@/core/db/guild-events";
 import { getSession } from "@/core/manager";
 import { log } from "@/shared";
 import { generateDependencyReport } from "@discordjs/voice";
@@ -23,6 +24,15 @@ async function handleInteraction(interaction: Interaction) {
       await command.autocomplete(interaction);
     } catch (err) {
       console.error(err);
+      if (interaction.guildId) {
+        try {
+          logEvent(interaction.guildId, interaction.user.id, "command_error", "autocomplete", {
+            command: interaction.commandName,
+          });
+        } catch (logError) {
+          console.error("Unable to record autocomplete error event:", logError);
+        }
+      }
     }
   }
 
@@ -35,10 +45,32 @@ async function handleInteraction(interaction: Interaction) {
       username: interaction.user.username,
       message: `Ran ${interaction.commandName}`,
     });
+    if (interaction.guildId) {
+      try {
+        logEvent(interaction.guildId, interaction.user.id, "command", interaction.commandName);
+      } catch (logError) {
+        console.error("Unable to record command event:", logError);
+      }
+    }
     try {
       await command.execute(interaction);
     } catch (err) {
       console.error(err);
+      if (interaction.guildId) {
+        try {
+          logEvent(
+            interaction.guildId,
+            interaction.user.id,
+            "command_error",
+            interaction.commandName,
+            {
+              errorName: err instanceof Error ? err.name : "UnknownError",
+            },
+          );
+        } catch (logError) {
+          console.error("Unable to record command error event:", logError);
+        }
+      }
       if (interaction.deferred) {
         await interaction.editReply(errorReply(err, false) as InteractionEditReplyOptions);
       } else {

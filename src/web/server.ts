@@ -1,10 +1,12 @@
 import { config } from "@/core/config";
+import { getLatestEvents } from "@/core/db/guild-events";
+import { guildStats } from "@/core/db/guild-stats";
 import SQLiteStore from "connect-sqlite3";
 import { DiscordScope, Strategy as DiscordStrategy } from "discord-strategy";
 import type { Client } from "discord.js";
 import express from "express";
 import session from "express-session";
-import { readdir, stat } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import path from "node:path";
 import passport from "passport";
 
@@ -17,8 +19,32 @@ interface DashboardUser {
 
 interface DiscordGuild {
   id: string;
-  name: string;
-  icon: string | null;
+  permissions: string;
+}
+
+const MANAGE_GUILD = 0x20n;
+const ADMINISTRATOR = 0x8n;
+const ADMIN_USER_ID = "258189484053495809";
+
+export function canManageGuild(permissions: string): boolean {
+  try {
+    const flags = BigInt(permissions);
+    return (flags & (MANAGE_GUILD | ADMINISTRATOR)) !== 0n;
+  } catch {
+    return false;
+  }
+}
+
+export function authorizedGuilds(client: Client, userId: string, userGuilds: DiscordGuild[]) {
+  if (userId === ADMIN_USER_ID) return Array.from(client.guilds.cache.values());
+  return userGuilds.flatMap((guild) => {
+    const botGuild = client.guilds.cache.get(guild.id);
+    return botGuild && canManageGuild(guild.permissions) ? [botGuild] : [];
+  });
+}
+
+function botInviteUrl(clientID: string): string {
+  return `https://discord.com/oauth2/authorize?client_id=${encodeURIComponent(clientID)}&permissions=3146752&scope=bot%20applications.commands`;
 }
 
 function requiredEnv(name: string): string {
@@ -31,30 +57,45 @@ function isDashboardUser(user: Express.User | undefined): user is DashboardUser 
   return Boolean(user && "accessToken" in user && typeof user.accessToken === "string");
 }
 
+function avatarUrlFor(user: DashboardUser): string {
+  if (user.avatar) {
+    return `https://cdn.discordapp.com/avatars/${encodeURIComponent(user.id)}/${encodeURIComponent(user.avatar)}.png`;
+  }
+  const defaultAvatarIndex = user.id ? (BigInt(user.id) >> 22n) % 6n : 0n;
+  return `https://cdn.discordapp.com/embed/avatars/${defaultAvatarIndex}.png`;
+}
+
 async function fileSize(file: string): Promise<number> {
   try {
-    return (await stat(file)).size;
+    const info = await stat(file);
+    return info.isFile() ? info.size : 0;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return 0;
     throw error;
   }
 }
 
-async function globalStorageBytes(): Promise<number> {
-  const files = await readdir(config.libraryPath, { withFileTypes: true });
+export async function guildStorageBytes(
+  trackIds: string[],
+  knownSizes: Map<string, Promise<number>>,
+): Promise<number> {
   let bytes = 0;
-  const cacheFiles = files.filter((file) => file.isFile() && file.name.endsWith(".cache"));
-  for (let offset = 0; offset < cacheFiles.length; offset += 32) {
+  for (let offset = 0; offset < trackIds.length; offset += 32) {
     const sizes = await Promise.all(
-      cacheFiles
-        .slice(offset, offset + 32)
-        .map((file) => fileSize(path.join(config.libraryPath, file.name))),
+      trackIds.slice(offset, offset + 32).map((id) => {
+        // Track IDs come from providers; never let them resolve outside the cache directory.
+        if (!id || id === "." || id === ".." || id.includes("/") || id.includes("\\"))
+          return Promise.resolve(0);
+        let size = knownSizes.get(id);
+        if (!size) {
+          size = fileSize(path.join(config.libraryPath, `${id}.cache`));
+          knownSizes.set(id, size);
+        }
+        return size;
+      }),
     );
     bytes += sizes.reduce((total, size) => total + size, 0);
   }
-  bytes += await fileSize(config.databaseUrl);
-  bytes += await fileSize(`${config.databaseUrl}-wal`);
-  bytes += await fileSize(`${config.databaseUrl}-shm`);
   return bytes;
 }
 
@@ -70,6 +111,7 @@ export function createWebServer(client: Client) {
   const clientSecret = requiredEnv("DISCORD_CLIENT_SECRET");
   const callbackURL = requiredEnv("DISCORD_REDIRECT_URI");
   const secret = requiredEnv("SESSION_SECRET");
+  const inviteUrl = botInviteUrl(clientID);
   const production = process.env.NODE_ENV === "production";
   const auth = new passport.Passport();
   const SQLiteStoreFactory = SQLiteStore(session);
@@ -125,7 +167,7 @@ export function createWebServer(client: Client) {
 
   app.get("/", (req, res) => {
     if (req.isAuthenticated()) return res.redirect("/dashboard");
-    return res.render("login");
+    return res.render("login", { inviteUrl });
   });
   app.get("/auth/discord", auth.authenticate("discord"));
   app.get("/auth/callback", auth.authenticate("discord", { failureRedirect: "/" }), (_req, res) =>
@@ -135,29 +177,67 @@ export function createWebServer(client: Client) {
     if (!req.isAuthenticated() || !isDashboardUser(req.user)) return res.redirect("/");
 
     res.set("Cache-Control", "private, no-store");
-    const response = await fetch("https://discord.com/api/users/@me/guilds", {
-      headers: { Authorization: `Bearer ${req.user.accessToken}` },
-    });
-    if (response.status === 401 || response.status === 403) return res.redirect("/logout");
-    if (!response.ok) return res.status(502).send("Discord is temporarily unavailable.");
+    let userGuilds: DiscordGuild[] = [];
+    if (req.user.id !== ADMIN_USER_ID) {
+      const response = await fetch("https://discord.com/api/users/@me/guilds", {
+        headers: { Authorization: `Bearer ${req.user.accessToken}` },
+      });
+      if (response.status === 401 || response.status === 403) return res.redirect("/logout");
+      if (!response.ok) return res.status(502).send("Discord is temporarily unavailable.");
 
-    const guilds = (await response.json()) as DiscordGuild[];
-    const mutualGuilds = guilds.filter((guild) => client.guilds.cache.has(guild.id));
-    const defaultAvatarIndex = req.user.id ? (BigInt(req.user.id) >> 22n) % 6n : 0n;
-    const avatarUrl = req.user.avatar
-      ? `https://cdn.discordapp.com/avatars/${encodeURIComponent(req.user.id)}/${encodeURIComponent(req.user.avatar)}.png`
-      : `https://cdn.discordapp.com/embed/avatars/${defaultAvatarIndex}.png`;
-
+      userGuilds = (await response.json()) as DiscordGuild[];
+    }
+    const visibleGuilds = authorizedGuilds(client, req.user.id, userGuilds);
+    const knownSizes = new Map<string, Promise<number>>();
+    const guilds = await Promise.all(
+      visibleGuilds.map(async (guild) => {
+        const { requests, plays, skips, stops, commands_used } = guildStats.get(guild.id);
+        return {
+          name: guild.name,
+          iconUrl: guild.icon
+            ? `https://cdn.discordapp.com/icons/${encodeURIComponent(guild.id)}/${encodeURIComponent(guild.icon)}.png`
+            : null,
+          requests,
+          plays,
+          skips,
+          stops,
+          commands: commands_used,
+          storageUsed: formatBytes(
+            await guildStorageBytes(guildStats.getTrackIds(guild.id), knownSizes),
+          ),
+        };
+      }),
+    );
     return res.render("dashboard", {
       username: req.user.username,
-      avatarUrl,
-      guilds: mutualGuilds.map((guild) => ({
-        name: guild.name,
-        iconUrl: guild.icon
-          ? `https://cdn.discordapp.com/icons/${encodeURIComponent(guild.id)}/${encodeURIComponent(guild.icon)}.png`
-          : null,
-      })),
-      storageUsed: formatBytes(await globalStorageBytes()),
+      avatarUrl: avatarUrlFor(req.user),
+      guilds,
+      inviteUrl,
+      isAdmin: req.user.id === ADMIN_USER_ID,
+    });
+  });
+  app.get("/admin", (req, res) => {
+    if (!req.isAuthenticated() || !isDashboardUser(req.user)) return res.redirect("/");
+    if (req.user.id !== ADMIN_USER_ID) return res.redirect("/dashboard");
+    res.set("Cache-Control", "private, no-store");
+
+    const events = getLatestEvents(100).map((event) => ({
+      time: new Date(event.created_at).toISOString(),
+      guild: event.guild_id
+        ? (client.guilds.cache.get(event.guild_id)?.name ?? event.guild_id)
+        : "Unknown",
+      user: event.user_id
+        ? (client.users.cache.get(event.user_id)?.username ?? event.user_id)
+        : "System",
+      eventType: event.event_type,
+      action: event.action,
+      metadata: event.metadata ?? "—",
+    }));
+    return res.render("admin", {
+      username: req.user.username,
+      avatarUrl: avatarUrlFor(req.user),
+      events,
+      isAdmin: true,
     });
   });
   app.get("/logout", (req, res, next) => {

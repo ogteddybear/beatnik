@@ -29,6 +29,36 @@ const tableInit = `
     playlistIdx  INTEGER,
     providerId  TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS GuildStats (
+    guild_id        TEXT PRIMARY KEY,
+    requests        INTEGER DEFAULT 0,
+    plays           INTEGER DEFAULT 0,
+    skips           INTEGER DEFAULT 0,
+    stops           INTEGER DEFAULT 0,
+    commands_used   INTEGER DEFAULT 0,
+    last_active_at  INTEGER
+  );
+
+  CREATE TABLE IF NOT EXISTS GuildTrackMap (
+    guild_id           TEXT,
+    track_id           TEXT,
+    last_requested_at  INTEGER,
+    PRIMARY KEY (guild_id, track_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS GuildEvents (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id    TEXT,
+    user_id     TEXT,
+    event_type  TEXT,
+    action      TEXT,
+    metadata    TEXT,
+    created_at  INTEGER
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_guild_events_latest
+    ON GuildEvents (created_at DESC, id DESC);
 `;
 
 async function getDatabaseClient() {

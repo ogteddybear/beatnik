@@ -13,6 +13,6 @@ export const execute: CommandExecuter = async (interaction) => {
     return;
   }
 
-  await session.player.stop();
+  await session.player.stop(interaction.user.id);
   await interaction.reply("Stopping and removing queue.");
 };

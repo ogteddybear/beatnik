@@ -65,6 +65,22 @@ const migrations: Migration[] = [
       }
     },
   },
+  {
+    name: "003_guild_stats_event_counters",
+    up: (db) => {
+      const existing = new Set(
+        db
+          .prepare<[], ColumnInfo>("PRAGMA table_info(GuildStats)")
+          .all()
+          .map((column) => column.name),
+      );
+      for (const column of ["skips", "stops", "commands_used"]) {
+        if (!existing.has(column)) {
+          db.exec(`ALTER TABLE GuildStats ADD COLUMN ${column} INTEGER DEFAULT 0`);
+        }
+      }
+    },
+  },
 ];
 
 export function runMigrations(db: Database): void {
