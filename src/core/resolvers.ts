@@ -50,9 +50,13 @@ async function resolvePlaylistMetadata(
   return provider.getPlaylist(id);
 }
 
-export async function resolveStream(id: string, provider: Provider): Promise<StreamResult> {
+export async function resolveStream(
+  guildId: string,
+  id: string,
+  provider: Provider,
+): Promise<StreamResult> {
   // prefer disk cache, then provider method
-  const cached = getDownloadedIdStream(id);
+  const cached = getDownloadedIdStream(guildId, id);
   if (cached) {
     return { stream: cached, fromCache: true };
   }

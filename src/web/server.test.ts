@@ -1,6 +1,6 @@
 import type { Client } from "discord.js";
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -44,11 +44,16 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
     authorizedGuilds(botClient, "258189484053495809", []).map((guild) => guild.id),
     ["managed", "member", "admin"],
   );
-  await writeFile(path.join(libraryPath, "cached.cache"), "cached audio");
-  assert.equal(
-    await guildStorageBytes(["cached", "missing", "../not-in-library"], new Map()),
-    Buffer.byteLength("cached audio"),
-  );
+  await mkdir(path.join(libraryPath, "managed"));
+  await mkdir(path.join(libraryPath, "global"));
+  await writeFile(path.join(libraryPath, "managed", "cached.cache"), "cached audio");
+  await writeFile(path.join(libraryPath, "managed", "second.cache"), "more");
+  await writeFile(path.join(libraryPath, "managed", "ignore.txt"), "not audio");
+  await writeFile(path.join(libraryPath, "global", "legacy.cache"), "legacy audio");
+  assert.equal(await guildStorageBytes("managed"), Buffer.byteLength("cached audiomore"));
+  assert.equal(await guildStorageBytes("member"), 0);
+  assert.equal(await guildStorageBytes("global"), Buffer.byteLength("legacy audio"));
+  assert.rejects(guildStorageBytes("../managed"), /Invalid guild ID/);
   const { default: ejs } = await import("ejs");
   const dashboard = await ejs.renderFile(path.join("src", "web", "views", "dashboard.ejs"), {
     username: "Test",

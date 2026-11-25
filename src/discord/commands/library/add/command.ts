@@ -25,12 +25,13 @@ export const execute: CommandExecuter = async (interaction) => {
 
   if (type === "playlist") {
     operation = await addPlaylistToLibrary(
+      guildId,
       metadata,
       provider,
       createDownloadProgressHandler(interaction),
     );
   } else if (type === "track" || type === "search") {
-    operation = await addTrackToLibrary(metadata, provider);
+    operation = await addTrackToLibrary(guildId, metadata, provider);
   } else {
     operation = null;
   }

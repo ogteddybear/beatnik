@@ -9,42 +9,67 @@ import { finished } from "node:stream/promises";
 import { config } from "../config";
 
 const libDir = config.libraryPath;
+const globalCache = "global";
 
 async function ensureLibraryDirectory() {
   await mkdir(libDir, { recursive: true });
 }
 
-function getItemPath(id: string) {
-  const itemPath = path.join(libDir, id + ".cache");
+function cacheDirectory(guildId: string) {
+  if (!guildId || guildId === "." || guildId === ".." || /[\\/:]/.test(guildId)) {
+    throw new Error("Invalid guild ID for cache");
+  }
+  return path.join(libDir, guildId);
+}
+
+function getItemPath(guildId: string, id: string) {
+  if (!id || id === "." || id === ".." || /[\\/:]/.test(id)) {
+    throw new Error("Invalid track ID for cache");
+  }
+  const itemPath = path.join(cacheDirectory(guildId), id + ".cache");
   const exists = existsSync(itemPath);
   return { path: itemPath, exists };
 }
 
+export function hasDownload(guildId: string, id: string): boolean {
+  return getItemPath(guildId, id).exists;
+}
+
 export async function migrateCacheNames() {
   await ensureLibraryDirectory();
-  const files = await readdir(libDir);
-  const opusFiles = files.filter((f) => f.endsWith(".opus"));
-  const renamePromises = opusFiles.map((f) => {
-    const oldPath = path.join(libDir, f);
-    const newPath = path.join(libDir, f.replace(".opus", ".cache"));
-    return rename(oldPath, newPath);
-  });
-  await Promise.all(renamePromises);
-  return renamePromises.length;
+  const globalDir = cacheDirectory(globalCache);
+  await mkdir(globalDir, { recursive: true });
+  let moved = 0;
+  for (const entry of await readdir(libDir, { withFileTypes: true })) {
+    if (!entry.isFile() || (!entry.name.endsWith(".opus") && !entry.name.endsWith(".cache")))
+      continue;
+    const target = path.join(globalDir, entry.name.replace(/\.opus$/, ".cache"));
+    if (existsSync(target)) {
+      throw new Error(`Cannot migrate ${entry.name}: destination already exists in global cache`);
+    }
+    await rename(path.join(libDir, entry.name), target);
+    moved++;
+  }
+  return moved;
 }
 
 export async function countCacheFiles() {
   await ensureLibraryDirectory();
-  const files = await readdir(libDir);
-  const cacheFiles = files.filter((f) => f.endsWith(".cache"));
-  return cacheFiles.length;
+  let count = 0;
+  for (const entry of await readdir(libDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    for (const file of await readdir(path.join(libDir, entry.name), { withFileTypes: true })) {
+      if (file.isFile() && file.name.endsWith(".cache")) count++;
+    }
+  }
+  return count;
 }
 
-export async function downloadToCache(id: string, stream: Readable) {
+export async function downloadToCache(guildId: string, id: string, stream: Readable) {
   // download stream to cache dir
   try {
-    await ensureLibraryDirectory();
-    const targetPath = getItemPath(id);
+    const targetPath = getItemPath(guildId, id);
+    await mkdir(cacheDirectory(guildId), { recursive: true });
     if (targetPath.exists) {
       return false;
     }
@@ -61,8 +86,8 @@ export async function downloadToCache(id: string, stream: Readable) {
   }
 }
 
-export async function removeDownload(id: string) {
-  const targetPath = getItemPath(id);
+export async function removeDownload(guildId: string, id: string) {
+  const targetPath = getItemPath(guildId, id);
   if (!targetPath.exists) {
     return;
   }
@@ -72,11 +97,12 @@ export async function removeDownload(id: string) {
 }
 
 export async function downloadPlaylist(
+  guildId: string,
   playlist: ProviderPlaylist,
   provider: Provider,
   onProgress?: (track: ProviderTrack, index: number, total: number) => void,
 ) {
-  const tracksToDownload = playlist.tracks.filter((t) => !getItemPath(t.id).exists);
+  const tracksToDownload = playlist.tracks.filter((t) => !getItemPath(guildId, t.id).exists);
   const concurrency = 10;
   const queue = [...tracksToDownload];
   let completed = 0;
@@ -88,7 +114,7 @@ export async function downloadPlaylist(
       if (!track) break;
       try {
         const stream = await provider.getStream(track.id);
-        await downloadToCache(track.id, stream);
+        await downloadToCache(guildId, track.id, stream);
         onProgress?.(track, ++completed, tracksToDownload.length);
       } catch (err) {
         log({
@@ -107,9 +133,11 @@ export async function downloadPlaylist(
   return { completed, errors };
 }
 
-export function getDownloadedIdStream(id: string) {
-  const targetPath = getItemPath(id);
-  if (!targetPath.exists) {
+export function getDownloadedIdStream(guildId: string, id: string) {
+  const guildFile = getItemPath(guildId, id);
+  const globalFile = getItemPath(globalCache, id);
+  const target = guildFile.exists ? guildFile : globalFile;
+  if (!target.exists) {
     log({
       component: "CORE",
       name: "CACHE",
@@ -117,5 +145,5 @@ export function getDownloadedIdStream(id: string) {
     });
     return undefined;
   }
-  return createReadStream(targetPath.path);
+  return createReadStream(target.path);
 }

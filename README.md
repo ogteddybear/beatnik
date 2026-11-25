@@ -65,9 +65,11 @@ The dashboard listens on `PORT` (default `8080`). On Fly, set the OAuth credenti
 `SESSION_SECRET` as secrets. Users see servers they can manage where the bot is present;
 the configured admin sees all bot servers. Requests, plays, skips, stops, commands,
 and raw events are tracked from this version onward (existing usage is not backfilled).
-Per-server storage is an estimate
-of cached tracks requested by that server, not exclusive disk usage: cached files can
-be shared by multiple servers, and files downloaded but never queued are not included.
+Cache files downloaded from guild library commands are stored in
+`LIBRARY_PATH/<guildId>/<trackId>.cache`. On startup, flat `.cache` and `.opus`
+files are moved to `LIBRARY_PATH/global/` and remain playable as a fallback.
+The dashboard sums only `.cache` files in each guild's own directory;
+shared legacy files in `global/` are not attributed to any guild.
 Dashboard sessions are stored in `LIBRARY_PATH/sessions.db` (on Fly's `/data` volume),
 so sessions persist across deploys. `connect-sqlite3` requires the separate `sqlite3`
 runtime driver; it does not use Sashimi's `better-sqlite3` database connection.

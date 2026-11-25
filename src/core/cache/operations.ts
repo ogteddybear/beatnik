@@ -9,6 +9,7 @@ import {
   countCacheFiles,
   downloadPlaylist,
   downloadToCache,
+  hasDownload,
   migrateCacheNames,
   removeDownload,
 } from "./disk";
@@ -51,12 +52,13 @@ export async function testLibraryConnection() {
 }
 
 export async function addTrackToLibrary(
+  guildId: string,
   track: ProviderTrack,
   provider: Provider,
 ): Promise<LibraryOperationResult> {
   // add track to db and save file
   const existingTrack = tracks.get(track.id);
-  if (existingTrack) {
+  if (existingTrack && hasDownload(guildId, track.id)) {
     return {
       added: false,
       updated: false,
@@ -67,12 +69,14 @@ export async function addTrackToLibrary(
   }
   try {
     const stream = await provider.getStream(track.id);
-    await downloadToCache(track.id, stream);
+    if (!(await downloadToCache(guildId, track.id, stream))) {
+      return { added: false, completed: 0, errors: 1 };
+    }
     // only create track in db if download succeeds
-    tracks.create({ ...track, playlistId: null, playlistIdx: null });
+    if (!existingTrack) tracks.create({ ...track, playlistId: null, playlistIdx: null });
     return {
-      added: true,
-      updated: false,
+      added: !existingTrack,
+      updated: !!existingTrack,
       completed: 1,
       errors: 0,
     };
@@ -82,20 +86,21 @@ export async function addTrackToLibrary(
       updated: false,
       completed: 0,
       errors: 1,
-    }
+    };
   }
-
 }
 
-export async function deleteTrackFromLibrary(int_id: number) {
+export async function deleteTrackFromLibrary(guildId: string, int_id: number) {
   const trackRecord = tracks.getInternal(int_id);
   if (!trackRecord) return;
-  await removeDownload(trackRecord.id);
+  await removeDownload(guildId, trackRecord.id);
+  await removeDownload("global", trackRecord.id);
   tracks.delete(int_id);
   return { title: trackRecord.title };
 }
 
 export async function addPlaylistToLibrary(
+  guildId: string,
   playlistData: ProviderPlaylist,
   provider: Provider,
   onProgress?: (track: ProviderTrack, index: number, total: number) => void,
@@ -106,7 +111,7 @@ export async function addPlaylistToLibrary(
   } else {
     playlists.create(playlistData);
   }
-  const { completed, errors } = await downloadPlaylist(playlistData, provider, onProgress);
+  const { completed, errors } = await downloadPlaylist(guildId, playlistData, provider, onProgress);
   return {
     added: !playlistExists,
     updated: playlistExists,
@@ -116,6 +121,7 @@ export async function addPlaylistToLibrary(
 }
 
 export async function updatePlaylistInLibrary(
+  guildId: string,
   playlistIntId: number,
   onProgress?: (track: ProviderTrack, index: number, total: number) => void,
 ) {
@@ -146,14 +152,17 @@ export async function updatePlaylistInLibrary(
   }
 
   return {
-    operation: await addPlaylistToLibrary(freshMetadata, provider, onProgress),
+    operation: await addPlaylistToLibrary(guildId, freshMetadata, provider, onProgress),
     playlistData: freshMetadata,
   };
 }
 
-export async function deletePlaylistFromLibrary(playlist_int_id: number) {
+export async function deletePlaylistFromLibrary(guildId: string, playlist_int_id: number) {
   const trackRecords = tracks.inPlaylist(playlist_int_id);
-  const rmPromises = trackRecords.map((t) => removeDownload(t.id));
+  const rmPromises = trackRecords.flatMap((t) => [
+    removeDownload(guildId, t.id),
+    removeDownload("global", t.id),
+  ]);
   await Promise.all(rmPromises);
 
   return playlists.delete(playlist_int_id);

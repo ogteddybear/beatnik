@@ -6,7 +6,7 @@ import { DiscordScope, Strategy as DiscordStrategy } from "discord-strategy";
 import type { Client } from "discord.js";
 import express from "express";
 import session from "express-session";
-import { stat } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import passport from "passport";
 
@@ -75,24 +75,25 @@ async function fileSize(file: string): Promise<number> {
   }
 }
 
-export async function guildStorageBytes(
-  trackIds: string[],
-  knownSizes: Map<string, Promise<number>>,
-): Promise<number> {
+export async function guildStorageBytes(guildId: string): Promise<number> {
+  if (!guildId || guildId === "." || guildId === ".." || /[\\/:]/.test(guildId)) {
+    throw new Error("Invalid guild ID for cache");
+  }
+  const directory = path.join(config.libraryPath, guildId);
+  let files;
+  try {
+    files = await readdir(directory, { withFileTypes: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return 0;
+    throw error;
+  }
   let bytes = 0;
-  for (let offset = 0; offset < trackIds.length; offset += 32) {
+  const cachedFiles = files.filter((file) => file.isFile() && file.name.endsWith(".cache"));
+  for (let offset = 0; offset < cachedFiles.length; offset += 32) {
     const sizes = await Promise.all(
-      trackIds.slice(offset, offset + 32).map((id) => {
-        // Track IDs come from providers; never let them resolve outside the cache directory.
-        if (!id || id === "." || id === ".." || id.includes("/") || id.includes("\\"))
-          return Promise.resolve(0);
-        let size = knownSizes.get(id);
-        if (!size) {
-          size = fileSize(path.join(config.libraryPath, `${id}.cache`));
-          knownSizes.set(id, size);
-        }
-        return size;
-      }),
+      cachedFiles
+        .slice(offset, offset + 32)
+        .map((file) => fileSize(path.join(directory, file.name))),
     );
     bytes += sizes.reduce((total, size) => total + size, 0);
   }
@@ -188,7 +189,6 @@ export function createWebServer(client: Client) {
       userGuilds = (await response.json()) as DiscordGuild[];
     }
     const visibleGuilds = authorizedGuilds(client, req.user.id, userGuilds);
-    const knownSizes = new Map<string, Promise<number>>();
     const guilds = await Promise.all(
       visibleGuilds.map(async (guild) => {
         const { requests, plays, skips, stops, commands_used } = guildStats.get(guild.id);
@@ -202,9 +202,7 @@ export function createWebServer(client: Client) {
           skips,
           stops,
           commands: commands_used,
-          storageUsed: formatBytes(
-            await guildStorageBytes(guildStats.getTrackIds(guild.id), knownSizes),
-          ),
+          storageUsed: formatBytes(await guildStorageBytes(guild.id)),
         };
       }),
     );

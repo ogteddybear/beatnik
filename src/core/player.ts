@@ -86,7 +86,7 @@ export class CorePlayer {
 
       let streamResult: Awaited<ReturnType<typeof resolveStream>>;
       try {
-        streamResult = await resolveStream(track.id, provider);
+        streamResult = await resolveStream(this.guildId, track.id, provider);
       } catch (err) {
         if (!isUnplayableYouTubeStreamError(err, provider)) throw err;
         log({

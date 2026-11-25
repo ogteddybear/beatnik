@@ -48,7 +48,7 @@ export const execute: CommandExecuter = async (interaction) => {
     return;
   } else if (subcommand === "playlist") {
     const int_id = interaction.options.getInteger("playlist-name", true);
-    const operation = await deletePlaylistFromLibrary(int_id);
+    const operation = await deletePlaylistFromLibrary(guildId, int_id);
     if (operation) {
       await interaction.reply({
         content: `${inlineCode(operation.title)} was removed.`,
@@ -60,7 +60,7 @@ export const execute: CommandExecuter = async (interaction) => {
     return;
   } else if (subcommand === "saved-track") {
     const int_id = interaction.options.getInteger("track-name", true);
-    const removedTrack = await deleteTrackFromLibrary(int_id);
+    const removedTrack = await deleteTrackFromLibrary(guildId, int_id);
     await interaction.reply({
       content: `${inlineCode(removedTrack?.title ?? "")} was removed.`,
     });

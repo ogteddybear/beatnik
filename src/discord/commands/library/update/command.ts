@@ -8,7 +8,10 @@ export async function updatePlaylistWithInteraction(
   playlistIntId: number,
   interaction: ChatInputCommandInteraction,
 ) {
+  const guildId = interaction.guildId;
+  if (!guildId) return;
   const update = await updatePlaylistInLibrary(
+    guildId,
     playlistIntId,
     createDownloadProgressHandler(interaction),
   );
