@@ -1,6 +1,6 @@
 services:
-  beatnik-dev:
-    container_name: beatnik-dev
+  sashimi-dev:
+    container_name: sashimi-dev
     image: nickseman/beatnik:dev
     build:
       context: .

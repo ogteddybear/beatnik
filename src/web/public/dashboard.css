@@ -1,0 +1,54 @@
+:root {
+  color-scheme: dark;
+}
+
+body {
+  color: #eef2ff;
+  background: radial-gradient(circle at 80% 5%, #1a3060 0, transparent 38%), #101827;
+}
+
+.navbar {
+  background: #101827ee;
+}
+
+.navbar-brand {
+  color: #eef2ff;
+}
+
+.dashboard-card {
+  color: #eef2ff;
+  background: #1c283d;
+  border: 1px solid #354460;
+  border-radius: 1rem;
+}
+
+.text-secondary {
+  color: #aab7d1 !important;
+}
+
+.brand-mark,
+.guild-placeholder {
+  display: grid;
+  place-items: center;
+  background: #3546a1;
+  color: #fff;
+}
+
+.brand-mark {
+  width: 64px;
+  height: 64px;
+  border-radius: 1rem;
+  font-size: 2rem;
+}
+
+.avatar,
+.guild-icon {
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.guild-placeholder {
+  flex: 0 0 56px;
+  height: 56px;
+  font-size: 1.5rem;
+}

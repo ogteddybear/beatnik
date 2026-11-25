@@ -1,4 +1,7 @@
 node_modules
 docker
 .env
+.env.*
+sessions.db
+sessions.db-*
 dist

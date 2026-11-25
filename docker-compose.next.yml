@@ -1,6 +1,6 @@
 services:
-  beatnik:
-    container_name: beatnik-next
+  sashimi:
+    container_name: sashimi-next
     image: nickseman/beatnik:next
     volumes:
       - "./docker/library.db:/app/library.db"

@@ -68,10 +68,13 @@ ENV DATABASE_URL="/app/library.db" \
     LIBRARY_PATH="/app/library" \
     NODE_ENV="production"
 COPY --from=app-builder /app/dist ./dist
+COPY --from=app-builder /app/src/web/views ./src/web/views
+COPY --from=app-builder /app/src/web/public ./src/web/public
 COPY --from=app-builder /app/node_modules ./node_modules
 COPY --from=app-builder /app/package.json ./
 COPY --from=deps-builder /usr/local/bin/yt-dlp /usr/local/bin/yt-dlp
 COPY --from=deps-builder /usr/local/bin/deno /usr/local/bin/deno
+EXPOSE 8080
 CMD ["dist/index.mjs"]
 
 #

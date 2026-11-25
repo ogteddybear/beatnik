@@ -49,7 +49,7 @@ export async function deployCommands() {
     log({
       component: "DISCORD",
       name: "COMMANDS",
-      message: `Successfully registered ${count} global commands for Beatnik (command version ${COMMANDS_VERSION})`,
+      message: `Successfully registered ${count} global commands for Sashimi (command version ${COMMANDS_VERSION})`,
     });
   } catch (err) {
     console.error(err);

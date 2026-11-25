@@ -83,4 +83,5 @@ export async function startDiscord() {
   client.on(Events.VoiceStateUpdate, handleVoiceStateUpdate);
 
   await client.login(config.discord.token);
+  return client;
 }
