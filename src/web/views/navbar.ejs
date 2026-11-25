@@ -1,0 +1,13 @@
+<nav class="navbar navbar-expand" aria-label="Main navigation">
+  <div class="container">
+    <a href="/dashboard" class="navbar-brand fw-bold"><span class="text-primary" aria-hidden="true">♫</span> Sashimi</a>
+    <div class="nav-actions">
+      <img class="avatar" src="<%= avatarUrl %>" alt="" width="36" height="36" />
+      <span class="nav-username d-none d-sm-inline"><%= username %></span>
+      <% if (isAdmin) { %>
+        <a class="btn btn-outline-light btn-sm" href="/admin" <%- active === 'admin' ? 'aria-current="page"' : '' %>>Admin</a>
+      <% } %>
+      <a class="btn btn-outline-light btn-sm" href="/logout">Log out</a>
+    </div>
+  </div>
+</nav>

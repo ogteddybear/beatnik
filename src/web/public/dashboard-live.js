@@ -11,15 +11,77 @@
     commands: "Commands",
   };
   let refreshing = false;
+  let listLoaded = false;
+  let summaryLoaded = false;
+  let activityLoaded = false;
+  const list = document.getElementById("guild-list");
 
   async function load(url) {
     const response = await fetch(url, { credentials: "same-origin", cache: "no-store" });
-    if (!response.ok) throw new Error(`Refresh failed (${response.status})`);
+    if (!response.ok) {
+      const message =
+        response.status === 401
+          ? "Your session has expired. Sign in again to refresh."
+          : response.status === 403
+            ? "You no longer have access to this view."
+            : response.status === 400
+              ? "Check your filters: use a valid date range, action name, and user ID."
+              : "We couldn’t refresh this view. We’ll try again shortly.";
+      throw new Error(message);
+    }
     return response.json();
   }
 
-  function setStatus(text) {
+  function setStatus(text, state = "success") {
     status.textContent = text;
+    status.dataset.state = state;
+  }
+
+  function showTableMessage(body, text, columns) {
+    body.querySelectorAll("[data-skeleton]").forEach((row) => row.remove());
+    body.querySelector("[data-placeholder]")?.remove();
+    const row = document.createElement("tr");
+    row.dataset.placeholder = "";
+    const cell = document.createElement("td");
+    cell.colSpan = columns;
+    cell.className = "table-empty";
+    cell.textContent = text;
+    row.append(cell);
+    body.append(row);
+    return cell;
+  }
+
+  function retryButton(parent, retry) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "btn btn-outline-light d-block mt-3";
+    button.textContent = "Try again";
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        await retry();
+      } finally {
+        button.disabled = false;
+      }
+    });
+    parent.append(button);
+  }
+
+  function initialListError() {
+    const total = document.getElementById("guild-total");
+    if (total) total.textContent = "—";
+    list.querySelectorAll("[data-skeleton], [data-load-error]").forEach((node) => node.remove());
+    // Keep the server-rendered nodes for reconciliation, but don't show stale content.
+    list.dataset.initial = "loading";
+    const col = document.createElement("div");
+    col.className = "col-12";
+    col.dataset.loadError = "";
+    const message = document.createElement("div");
+    message.className = "region-error";
+    message.textContent = "Server statistics couldn’t be loaded.";
+    retryButton(message, refresh);
+    col.append(message);
+    list.append(col);
   }
 
   function serverCard(guild, admin) {
@@ -115,7 +177,6 @@
 
   async function refreshList() {
     const data = await load(mode === "admin" ? "/api/admin/guilds" : "/api/dashboard/guilds");
-    const list = document.getElementById("guild-list");
     const existing = new Map([...list.children].map((col) => [col.dataset.guildId, col]));
     const ids = new Set(data.guilds.map((guild) => guild.id));
     for (const col of [...list.children]) if (!ids.has(col.dataset.guildId)) col.remove();
@@ -130,13 +191,21 @@
       } else updateCard(col, guild);
     }
     if (!data.guilds.length) {
-      const empty = document.createElement("p");
-      empty.className = "text-secondary";
-      empty.textContent = "No eligible servers found.";
+      const empty = document.createElement("div");
+      empty.className = "col-12";
+      const message = document.createElement("p");
+      message.className = "empty-state mb-0";
+      message.textContent =
+        mode === "admin"
+          ? "No servers yet. Invite Sashimi to a server to see it here."
+          : "No servers to show. You’ll see servers you manage once Sashimi has joined them.";
+      empty.append(message);
       list.append(empty);
     }
     const total = document.getElementById("guild-total");
     if (total) total.textContent = `${data.guilds.length} total`;
+    listLoaded = true;
+    delete list.dataset.initial;
   }
 
   const guildId = document.body.dataset.guildId;
@@ -170,6 +239,8 @@
   }
 
   function appendEvents(events, isLive) {
+    rows.querySelectorAll("[data-skeleton]").forEach((row) => row.remove());
+    rows.querySelector("[data-placeholder]")?.remove();
     for (const event of events) {
       if (seen.has(event.id)) continue;
       seen.add(event.id);
@@ -184,6 +255,7 @@
       rows.lastElementChild.remove();
     }
     if (rows.lastElementChild) oldestId = Number(rows.lastElementChild.dataset.eventId);
+    if (!rows.children.length) showTableMessage(rows, "No activity matches these filters.", 5);
   }
 
   function activityUrl(extra = {}) {
@@ -196,6 +268,8 @@
   async function loadActivity(kind) {
     if (activityBusy) return;
     activityBusy = true;
+    older.disabled = true;
+    rows.setAttribute("aria-busy", "true");
     const generation = requestGeneration;
     try {
       const extra =
@@ -207,14 +281,30 @@
       const data = await load(activityUrl(extra));
       if (generation !== requestGeneration) return;
       appendEvents(data.events, kind === "live");
+      activityLoaded = true;
       if (kind !== "live") older.hidden = !data.hasMore;
-      setStatus("Activity up to date.");
+      setStatus("Activity is up to date.");
       return true;
     } catch (error) {
-      setStatus(error.message);
+      setStatus(
+        error instanceof TypeError
+          ? "Connection interrupted. We’ll try again shortly."
+          : error.message,
+        "error",
+      );
+      if (!seen.size) {
+        const cell = showTableMessage(
+          rows,
+          "Activity couldn’t be loaded. Check the message above.",
+          5,
+        );
+        retryButton(cell, () => loadActivity("initial"));
+      }
       return false;
     } finally {
       activityBusy = false;
+      older.disabled = false;
+      rows.setAttribute("aria-busy", "false");
       if (generation !== requestGeneration) void loadActivity("initial");
     }
   }
@@ -231,7 +321,7 @@
       const start = values.get("from");
       const end = values.get("to");
       if (!start || !end) {
-        setStatus("Choose both dates for a custom range.");
+        setStatus("Choose both dates for a custom range.", "warning");
         return;
       }
       from = Date.parse(`${start}T00:00:00Z`);
@@ -242,7 +332,7 @@
         to <= from ||
         to - from > 90 * 86_400_000
       ) {
-        setStatus("Choose a valid range of at most 90 days.");
+        setStatus("Choose a valid range of at most 90 days.", "warning");
         return;
       }
     }
@@ -257,7 +347,12 @@
     }
     requestGeneration++;
     seen.clear();
-    rows.replaceChildren();
+    // On first entry, retain the server-rendered skeleton until the request settles.
+    // Filter changes after a successful load use plain loading copy, not skeletons.
+    if (activityLoaded || !rows.querySelector("[data-skeleton]")) {
+      rows.replaceChildren();
+      showTableMessage(rows, "Loading activity…", 5);
+    }
     latestId = 0;
     oldestId = 0;
     older.hidden = true;
@@ -265,50 +360,90 @@
   }
 
   async function refreshDetailSummary() {
-    const data = await load(`${base}/summary`);
     const body = document.getElementById("range-stats");
-    body.replaceChildren();
-    for (const [key, label] of [
-      ["day", "24 hours"],
-      ["week", "7 days"],
-      ["month", "30 days"],
-    ]) {
-      const row = document.createElement("tr");
-      for (const value of [
-        label,
-        ...["plays", "requests", "adds", "skips", "stops", "commands", "errors"].map(
-          (name) => data.ranges[key][name],
-        ),
+    body.setAttribute("aria-busy", "true");
+    try {
+      const data = await load(`${base}/summary`);
+      body.replaceChildren();
+      for (const [key, label] of [
+        ["day", "24 hours"],
+        ["week", "7 days"],
+        ["month", "30 days"],
       ]) {
-        const cell = document.createElement("td");
-        cell.textContent = value;
-        row.append(cell);
+        const row = document.createElement("tr");
+        for (const value of [
+          label,
+          ...["plays", "requests", "adds", "skips", "stops", "commands", "errors"].map(
+            (name) => data.ranges[key][name],
+          ),
+        ]) {
+          const cell = document.createElement("td");
+          cell.textContent = value;
+          row.append(cell);
+        }
+        body.append(row);
       }
-      body.append(row);
+      const totals = data.allTime;
+      document.getElementById("all-time").textContent =
+        `Since tracking began: ${totals.plays} plays · ${totals.requests} requests · ${totals.skips} skips · ${totals.stops} stops · ${totals.commands_used} commands.`;
+      document.getElementById("storage").textContent =
+        `Audio storage: ${data.storageUsed}. Shared audio files aren’t included.`;
+      summaryLoaded = true;
+      setStatus("Statistics are up to date.");
+      return true;
+    } catch (error) {
+      setStatus(
+        error instanceof TypeError
+          ? "Connection interrupted. We’ll try again shortly."
+          : error.message,
+        "error",
+      );
+      if (!summaryLoaded) {
+        const cell = showTableMessage(body, "Statistics couldn’t be loaded.", 8);
+        retryButton(cell, refreshDetailSummary);
+        document.getElementById("all-time").textContent = "";
+        document.getElementById("storage").textContent = "";
+      }
+      return false;
+    } finally {
+      body.setAttribute("aria-busy", "false");
     }
-    const totals = data.allTime;
-    document.getElementById("all-time").textContent =
-      `Since tracking began: ${totals.plays} plays · ${totals.requests} requests · ${totals.skips} skips · ${totals.stops} stops · ${totals.commands_used} commands.`;
-    document.getElementById("storage").textContent =
-      `Current guild cache storage: ${data.storageUsed} (excludes shared global/ files).`;
   }
 
   async function refresh() {
     if (refreshing || document.hidden) return;
     refreshing = true;
+    document.getElementById("guild-list")?.setAttribute("aria-busy", "true");
+    status.setAttribute("aria-busy", "true");
     try {
       if (mode === "detail") {
-        await refreshDetailSummary();
-        const activityOkay = activityBusy || (await loadActivity(latestId ? "live" : "initial"));
-        if (activityOkay === false) return;
+        const [summaryOkay, activityOkay] = await Promise.all([
+          refreshDetailSummary(),
+          activityBusy ? Promise.resolve(true) : loadActivity(latestId ? "live" : "initial"),
+        ]);
+        if (summaryOkay === false || activityOkay === false) {
+          setStatus(
+            "Some data couldn’t be refreshed. Your last loaded data is still shown; use Try again for any region that hasn’t loaded.",
+            "error",
+          );
+          return;
+        }
       } else {
         await refreshList();
       }
-      setStatus("Statistics up to date.");
+      setStatus("Statistics are up to date.");
     } catch (error) {
-      setStatus(error.message);
+      setStatus(
+        error instanceof TypeError
+          ? "Connection interrupted. We’ll try again shortly."
+          : error.message,
+        "error",
+      );
+      if (list && !listLoaded) initialListError();
     } finally {
       refreshing = false;
+      status.setAttribute("aria-busy", "false");
+      document.getElementById("guild-list")?.setAttribute("aria-busy", "false");
     }
   }
 

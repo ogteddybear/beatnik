@@ -1,48 +1,31 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-bs-theme="dark">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#101827" />
-    <title>Sashimi · Dashboard</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
-    <link href="/static/dashboard.css" rel="stylesheet" />
-    <script src="/static/dashboard-live.js" defer></script>
+    <%- include('head', { title: 'Sashimi · Dashboard', live: true }) %>
   </head>
   <body class="min-vh-100" data-dashboard="regular">
-    <nav class="navbar navbar-expand border-bottom border-secondary-subtle">
-      <div class="container">
-        <a href="/dashboard" class="navbar-brand fw-bold"><span class="text-primary">♫</span> Sashimi</a>
-        <div class="d-flex align-items-center gap-3">
-          <img class="avatar" src="<%= avatarUrl %>" alt="" width="36" height="36" />
-          <span class="d-none d-sm-inline"><%= username %></span>
-          <% if (isAdmin) { %>
-            <a class="btn btn-outline-light btn-sm" href="/admin">Admin</a>
-          <% } %>
-          <a class="btn btn-outline-light btn-sm" href="/logout">Log out</a>
-        </div>
-      </div>
-    </nav>
+    <%- include('navbar', { active: 'dashboard' }) %>
 
-    <main class="container py-5">
-      <header class="d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-3 mb-5">
+    <main class="container page-container">
+      <header class="page-header">
         <div>
-          <p class="text-primary text-uppercase fw-semibold small mb-2">Your dashboard</p>
+          <p class="text-primary text-uppercase fw-semibold eyebrow mb-2">Your dashboard</p>
           <h1 class="display-6 fw-bold">Welcome back, <%= username %></h1>
-          <p class="text-secondary mb-0">Servers you manage where Sashimi is installed.</p>
+          <p class="text-secondary mb-0 page-description">Your servers with Sashimi, all in one place.</p>
         </div>
         <a class="btn btn-primary btn-lg" href="<%= inviteUrl %>">Invite Sashimi</a>
       </header>
-      <p id="live-status" class="small text-secondary" role="status" aria-live="polite">Statistics refresh automatically.</p>
+      <p id="live-status" class="live-status mb-4" role="status" aria-live="polite" data-state="loading">Loading your servers…</p>
 
       <section aria-labelledby="servers-heading">
         <div class="d-flex align-items-baseline justify-content-between mb-3">
           <h2 class="h4 fw-bold" id="servers-heading">Your servers</h2>
-          <span id="guild-total" class="text-secondary"><%= guilds.length %> total</span>
+          <span id="guild-total" class="text-secondary placeholder-glow"><span class="placeholder px-4" aria-hidden="true">&nbsp;</span></span>
         </div>
-        <div id="guild-list" class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
+        <div id="guild-list" class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-4" aria-busy="true" data-initial="loading">
+          <%- include('list-placeholders', { guilds, admin: false }) %>
           <% if (guilds.length === 0) { %>
-            <div class="col"><div class="card dashboard-card p-4 text-secondary">No eligible servers found. Manage a server where Sashimi is installed, or invite Sashimi to one.</div></div>
+            <div class="col-12" data-empty><div class="empty-state">No servers to show. You’ll see servers you manage once Sashimi has joined them.</div></div>
           <% } else { %>
             <% for (const guild of guilds) { %>
               <%- include('server-card', { guild, isAdmin: false }) %>
