@@ -54,3 +54,7 @@ export function deleteSession(guildId: string) {
 export function getSession(guildId: string): GuildSession | undefined {
   return sessions.get(guildId);
 }
+
+export function getGuildPlayerState(guildId: string) {
+  return sessions.get(guildId)?.player.getState() ?? null;
+}

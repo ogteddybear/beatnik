@@ -126,6 +126,20 @@ events retain null fields rather than inventing historical names. Successful new
 cache writes log a separate `library/download` event. Voice joins/leaves, explicit
 volume changes (`/volume percent:0..200`), and clearing upcoming tracks (`/clear`,
 which leaves the current track playing) are also recorded.
+While a voice session is active, one Now Playing message is edited as tracks
+change and every 15 seconds. Its buttons pause/resume, skip, and cycle loop mode
+Off → Track → Queue → Off. Users must be in the bot's voice channel; expired
+panels cannot control a new session. Ending playback removes the buttons.
+Track repeat applies only to natural completion, not explicit skips or errors.
+Queue repeat wraps to the first track; an entirely failed queue stops rather
+than retrying forever.
+
+The regular and owner dashboards show read-only Now Playing widgets for only the
+guilds already visible to that user, including artist, thumbnail, progress,
+loop/paused state, and up to five upcoming tracks. State refreshes every 15 seconds
+while the page is visible. Player queues, loop modes and pause state remain
+in-memory and reset on restart. Seeking is not offered: the current provider
+contract returns non-seekable streams without a start-offset API.
 
 Raw events older than 30 days are moved on startup and every 24 hours to
 `LIBRARY_PATH/library-archive.db`. Each bounded batch copies and deletes events

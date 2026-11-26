@@ -16,9 +16,32 @@ export interface QueuedTrack extends ProviderTrack {
   addedByUsername?: string;
 }
 
+export type LoopMode = "off" | "track" | "queue";
+
 export class Queue {
   tracks: QueuedTrack[] = [];
   currentIndex = 0;
+  loopMode: LoopMode = "off";
+
+  toggleLoop(): LoopMode {
+    this.loopMode = this.loopMode === "off" ? "track" : this.loopMode === "track" ? "queue" : "off";
+    return this.loopMode;
+  }
+
+  advance(naturalFinish = true): boolean {
+    if (naturalFinish && this.loopMode === "track" && this.nowPlaying) return true;
+    this.currentIndex++;
+    if (this.loopMode === "queue" && this.tracks.length && this.currentIndex >= this.tracks.length)
+      this.currentIndex = 0;
+    return !!this.nowPlaying;
+  }
+
+  upcoming(limit = 5): QueuedTrack[] {
+    const after = this.tracks.slice(this.currentIndex + 1);
+    return (
+      this.loopMode === "queue" ? [...after, ...this.tracks.slice(0, this.currentIndex + 1)] : after
+    ).slice(0, limit);
+  }
 
   insert(track: QueuedTrack, start: number) {
     this.tracks.splice(start, 0, track);
@@ -30,7 +53,7 @@ export class Queue {
 
   shuffle() {
     const before = this.tracks.slice(0, this.currentIndex + 1);
-    const after = this.tracks.slice(this.currentIndex + 2);
+    const after = this.tracks.slice(this.currentIndex + 1);
     const shuffled = shuffleArray(after);
     this.tracks = [...before, ...shuffled];
   }

@@ -4,6 +4,9 @@ import type { TextBasedChannel, VoiceBasedChannel } from "discord.js";
 import { VoiceSession } from "./voice";
 
 const voiceSessions = new Map<string, VoiceSession>();
+export function getVoiceSession(guildId: string) {
+  return voiceSessions.get(guildId);
+}
 
 export function getOrCreateVoiceSession(
   voiceChannel: VoiceBasedChannel,

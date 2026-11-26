@@ -15,7 +15,7 @@ import type { TextBasedChannel, VoiceBasedChannel } from "discord.js";
 
 import { createVoiceConnection } from "./connection";
 import { deleteVoiceSession } from "./manager";
-import { getNowPlayingEmbed } from "./messaging";
+import { NowPlayingPanel } from "./now-playing";
 
 export function trackVoiceLifecycle(
   connection: { once(event: string, listener: () => void): unknown },
@@ -48,6 +48,12 @@ export class VoiceSession {
   private connection: VoiceConnection;
   private resource?: AudioResource;
   private normalizationDb = 0;
+  private panel?: NowPlayingPanel;
+  private panelTimer?: ReturnType<typeof setInterval>;
+  private destroyed = false;
+  private controlBusy = false;
+  private trackFailed = false;
+  readonly channelId: string;
 
   constructor(
     voiceChannel: VoiceBasedChannel,
@@ -55,20 +61,40 @@ export class VoiceSession {
     corePlayer: CorePlayer,
     actor?: { userId: string; username: string },
   ) {
+    this.channelId = voiceChannel.id;
     this.guildId = voiceChannel.guildId;
     this.textChannel = textChannel;
     this.connection = createVoiceConnection(voiceChannel);
     this.subscription = this.connection.subscribe(this.audioPlayer);
     trackVoiceLifecycle(this.connection, this.guildId, voiceChannel, actor);
+    if (textChannel?.isSendable()) {
+      this.panel = new NowPlayingPanel(textChannel, corePlayer);
+      this.panelTimer = setInterval(() => void this.panel?.refresh(), 15_000);
+      this.panelTimer.unref();
+    }
+    corePlayer.onStateChange = () => {
+      void this.panel?.refresh();
+    };
+    corePlayer.onPause = (paused) =>
+      paused ? this.audioPlayer.pause() : this.audioPlayer.unpause();
+    corePlayer.onPosition = () => (this.resource?.playbackDuration ?? 0) / 1000;
     corePlayer.onVolume = (percent) => {
       this.resource?.volume?.setVolumeDecibels(this.normalizationDb);
       if (this.resource?.volume)
         this.resource.volume.setVolume((this.resource.volume.volume * percent) / 100);
     };
 
-    corePlayer.onStream = async (track, inputStream) => {
+    corePlayer.onStream = async (track, inputStream, isCurrent) => {
       await entersState(this.connection, VoiceConnectionStatus.Ready, 10_000);
+      if (this.destroyed || !isCurrent()) {
+        inputStream.destroy();
+        return;
+      }
       const { stream, type } = await demuxProbe(inputStream);
+      if (this.destroyed || !isCurrent()) {
+        stream.destroy();
+        return;
+      }
       const resource = createAudioResource(stream, {
         inputType: type,
         inlineVolume: true,
@@ -80,6 +106,7 @@ export class VoiceSession {
       if (resource.volume)
         resource.volume.setVolume((resource.volume.volume * corePlayer.volume) / 100);
       this.audioPlayer.play(resource);
+      this.trackFailed = false;
 
       const operator = decibels >= 0 ? "+" : "";
       log({
@@ -87,22 +114,11 @@ export class VoiceSession {
         name: "VoiceSession",
         message: `Playing resource, adjusted loudness ${operator}${decibels}dB`,
       });
-
-      // send embed in textchannel
-      if (this.textChannel && this.textChannel.isSendable() && corePlayer.queue.nowPlaying) {
-        const nowPlayingEmbed = getNowPlayingEmbed(
-          corePlayer.queue.nowPlaying,
-          corePlayer.queue.currentIndex + 1,
-          corePlayer.queue.tracks.length,
-          corePlayer.fromCache,
-        );
-        this.textChannel.send({ embeds: [nowPlayingEmbed] });
-      }
     };
 
     corePlayer.onQueueEnd = () => {
       if (this.textChannel?.isSendable()) {
-        this.textChannel.send(":wave: Nothing left in the queue!");
+        void this.textChannel.send(":wave: Nothing left in the queue!").catch(console.error);
       }
       deleteVoiceSession(this.guildId);
       deleteSession(this.guildId);
@@ -117,12 +133,16 @@ export class VoiceSession {
       // errors already throw/log elsewhere, just message the textChannel
       if (this.textChannel && this.textChannel.isSendable()) {
         const message = `Unable to play **${track.title}**\n\`\`\`${err.message}\`\`\``;
-        this.textChannel.send(message);
+        void this.textChannel.send(message).catch(console.error);
       }
     };
 
-    this.audioPlayer.on(AudioPlayerStatus.Idle, () => corePlayer.next());
+    this.audioPlayer.on(AudioPlayerStatus.Idle, () => {
+      if (!this.destroyed && !corePlayer.isLoading && corePlayer.isPlaying)
+        void corePlayer.finish(this.trackFailed).catch(console.error);
+    });
     this.audioPlayer.on("error", (err) => {
+      this.trackFailed = true;
       const track = corePlayer.queue.nowPlaying;
       if (track) {
         try {
@@ -148,7 +168,27 @@ export class VoiceSession {
   }
 
   destroy() {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    if (this.panelTimer) clearInterval(this.panelTimer);
+    void this.panel?.close();
+    this.audioPlayer.stop();
     this.subscription?.unsubscribe();
     this.connection.destroy();
+  }
+
+  isCurrentMessage(messageId: string) {
+    return this.panel?.isCurrentMessage(messageId) ?? false;
+  }
+
+  async runControl(action: () => Promise<void>): Promise<boolean> {
+    if (this.destroyed || this.controlBusy) return false;
+    this.controlBusy = true;
+    try {
+      await action();
+      return true;
+    } finally {
+      this.controlBusy = false;
+    }
   }
 }

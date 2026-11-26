@@ -68,6 +68,9 @@
   }
 
   function initialListError() {
+    const players = document.getElementById("live-players");
+    if (players)
+      players.textContent = "Player information is unavailable. Try refreshing server statistics.";
     const total = document.getElementById("guild-total");
     if (total) total.textContent = "—";
     list.querySelectorAll("[data-skeleton], [data-load-error]").forEach((node) => node.remove());
@@ -240,6 +243,87 @@
     if (total) total.textContent = `${data.guilds.length} total`;
     listLoaded = true;
     delete list.dataset.initial;
+    refreshPlayers(data.guilds);
+  }
+
+  function refreshPlayers(guilds) {
+    const root = document.getElementById("live-players");
+    if (!root) return;
+    const content = document.createDocumentFragment();
+    for (const guild of guilds) {
+      const state = guild.player;
+      if (!state) continue;
+      const card = document.createElement("article");
+      card.className = "border-top pt-3 mt-3";
+      const header = document.createElement("div");
+      header.className = "d-flex align-items-center gap-3";
+      if (/^https?:\/\//i.test(state.track.thumbnail || "")) {
+        const thumbnail = document.createElement("img");
+        thumbnail.src = state.track.thumbnail;
+        thumbnail.alt = "";
+        thumbnail.width = 64;
+        thumbnail.height = 64;
+        thumbnail.className = "rounded object-fit-cover";
+        thumbnail.addEventListener("error", () => {
+          thumbnail.hidden = true;
+        });
+        header.append(thumbnail);
+      }
+      const identity = document.createElement("div");
+      const name = document.createElement("p");
+      name.className = "small text-secondary mb-1";
+      name.textContent = `${guild.name} · ${state.status} · Loop: ${state.loopMode}`;
+      const title = document.createElement("h3");
+      title.className = "h5 mb-1";
+      title.textContent = state.track.title;
+      const artist = document.createElement("p");
+      artist.className = "text-secondary mb-0";
+      artist.textContent = state.track.artist;
+      identity.append(name, title, artist);
+      header.append(identity);
+      card.append(header);
+      const time = (seconds) => {
+        const value = Math.max(0, Math.floor(seconds));
+        return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, "0")}`;
+      };
+      const position = document.createElement("p");
+      position.className = "small text-secondary mt-2 mb-1";
+      position.textContent = `${time(state.progressSeconds)} / ${state.track.durationSeconds ? time(state.track.durationSeconds) : "Live"}`;
+      const progress = document.createElement("div");
+      progress.className = "progress";
+      progress.setAttribute("role", "progressbar");
+      progress.setAttribute("aria-label", "Playback progress");
+      progress.setAttribute("aria-valuemin", "0");
+      progress.setAttribute("aria-valuemax", "100");
+      const percent = Math.max(0, Math.min(100, state.progressPercent));
+      progress.setAttribute("aria-valuenow", String(percent));
+      const bar = document.createElement("div");
+      bar.className = "progress-bar bg-primary";
+      bar.style.width = `${percent}%`;
+      progress.append(bar);
+      card.append(position, progress);
+      if (state.nextTracks.length) {
+        const label = document.createElement("p");
+        label.className = "small text-secondary mt-3 mb-1";
+        label.textContent = "Up next";
+        const upcoming = document.createElement("ol");
+        upcoming.className = "small mb-0";
+        for (const track of state.nextTracks.slice(0, 5)) {
+          const item = document.createElement("li");
+          item.textContent = track.title;
+          upcoming.append(item);
+        }
+        card.append(label, upcoming);
+      }
+      content.append(card);
+    }
+    if (!content.childNodes.length) {
+      const empty = document.createElement("p");
+      empty.className = "text-secondary mb-0";
+      empty.textContent = "Nothing is playing in your servers.";
+      content.append(empty);
+    }
+    root.replaceChildren(content);
   }
 
   async function refreshInfrastructure() {

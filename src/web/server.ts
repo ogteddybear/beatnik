@@ -8,6 +8,7 @@ import {
 } from "@/core/db/guild-events";
 import { MB, setGuildStorageLimit } from "@/core/db/guild-settings";
 import { guildStats } from "@/core/db/guild-stats";
+import { getGuildPlayerState } from "@/core/manager";
 import SQLiteStore from "connect-sqlite3";
 import { DiscordScope, Strategy as DiscordStrategy } from "discord-strategy";
 import type { Client } from "discord.js";
@@ -175,6 +176,7 @@ async function guildSummaries(guilds: ReturnType<typeof authorizedGuilds>) {
           errors: 0,
         },
         ...(await storageView(guild.id)),
+        player: getGuildPlayerState(guild.id),
       };
     }),
   );
@@ -199,6 +201,7 @@ function safeEventDetails(metadata: string | null): string {
       "percent",
       "previous",
       "removedCount",
+      "loopMode",
     ] as const;
     const details = fields.flatMap((field) => {
       const entry = (value as Record<string, unknown>)[field];
@@ -525,6 +528,7 @@ export function createWebServer(client: Client) {
         month: guildEventCounts(req.params.guildId, now - 30 * DAY, now + 1),
       },
       ...(await storageView(req.params.guildId)),
+      player: getGuildPlayerState(req.params.guildId),
     });
   });
   app.post(

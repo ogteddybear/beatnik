@@ -14,9 +14,18 @@ import { Client, Events, GatewayIntentBits } from "discord.js";
 import { commandList } from "./commands";
 import { deployCommands } from "./commands/deploy-commands";
 import { errorReply } from "./messaging";
+import { handlePlayerButton } from "./player-buttons";
 import { startPresenceLifecycle } from "./presence";
 
 async function handleInteraction(interaction: Interaction) {
+  if (interaction.isButton()) {
+    try {
+      await handlePlayerButton(interaction);
+    } catch {
+      console.warn("Unable to acknowledge the player button.");
+    }
+    return;
+  }
   if (interaction.isAutocomplete()) {
     const command = commandList[interaction.commandName];
     if (!command?.autocomplete) return;

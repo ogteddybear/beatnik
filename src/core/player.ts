@@ -4,7 +4,7 @@ import type { Readable } from "node:stream";
 
 import { type EventOptions, logEvent } from "./db/guild-events";
 import { guildStats } from "./db/guild-stats";
-import type { Queue, QueuedTrack } from "./queue";
+import type { LoopMode, Queue, QueuedTrack } from "./queue";
 import { shuffleArray } from "./queue";
 import {
   isUnplayableYouTubeStreamError,
@@ -12,6 +12,15 @@ import {
   resolveStream,
   resolveTrackLoudness,
 } from "./resolvers";
+
+export interface PlayerState {
+  status: "loading" | "paused" | "playing";
+  track: { id: string; title: string; artist: string; thumbnail: string; durationSeconds: number };
+  progressSeconds: number;
+  progressPercent: number;
+  loopMode: LoopMode;
+  nextTracks: PlayerState["track"][];
+}
 
 export class CorePlayer {
   constructor(
@@ -21,11 +30,24 @@ export class CorePlayer {
   ) {}
 
   isPlaying = false;
+  isPaused = false;
+  isLoading = false;
+  private generation = 0;
+  private startedAt = 0;
+  private elapsed = 0;
+  private failedTracks = new Set<number>();
   fromCache: boolean | null = null;
   volume = 100;
   onVolume?: (percent: number) => void;
+  onPause?: (paused: boolean) => boolean;
+  onPosition?: () => number;
+  onStateChange?: () => void;
 
-  onStream?: (track: ProviderTrack, stream: Readable) => void | Promise<void>;
+  onStream?: (
+    track: ProviderTrack,
+    stream: Readable,
+    isCurrent: () => boolean,
+  ) => void | Promise<void>;
   onQueueEnd?: () => void;
   onStop?: () => void;
   onError?: (track: ProviderTrack, err: Error) => void;
@@ -67,25 +89,94 @@ export class CorePlayer {
     });
   }
 
-  async play() {
+  getState(): PlayerState | null {
     const track = this.queue.nowPlaying;
-    if (!track) {
+    if (!track || !this.isPlaying) return null;
+    const view = (item: ProviderTrack) => ({
+      id: item.id,
+      title: item.title,
+      artist: item.channelName,
+      thumbnail: item.thumbnailUrl,
+      durationSeconds: Math.max(0, item.length),
+    });
+    const progress = this.isLoading
+      ? 0
+      : (this.onPosition?.() ??
+        this.elapsed + (this.isPaused ? 0 : (Date.now() - this.startedAt) / 1000));
+    const duration = Math.max(0, track.length);
+    const progressSeconds = Math.max(0, duration ? Math.min(duration, progress) : progress);
+    return {
+      status: this.isLoading ? "loading" : this.isPaused ? "paused" : "playing",
+      track: view(track),
+      progressSeconds,
+      progressPercent: duration ? (progressSeconds / duration) * 100 : 0,
+      loopMode: this.queue.loopMode,
+      nextTracks: this.queue.upcoming().map(view),
+    };
+  }
+
+  pause(userId?: string, username?: string): boolean {
+    if (!this.isPlaying || this.isLoading || this.isPaused || !this.onPause?.(true)) return false;
+    this.elapsed += (Date.now() - this.startedAt) / 1000;
+    this.isPaused = true;
+    this.logPlayerEvent({ userId, username, eventType: "player", action: "pause" });
+    this.onStateChange?.();
+    return true;
+  }
+
+  resume(userId?: string, username?: string): boolean {
+    if (!this.isPlaying || this.isLoading || !this.isPaused || !this.onPause?.(false)) return false;
+    this.startedAt = Date.now();
+    this.isPaused = false;
+    this.logPlayerEvent({ userId, username, eventType: "player", action: "resume" });
+    this.onStateChange?.();
+    return true;
+  }
+
+  toggleLoop(userId?: string, username?: string): LoopMode {
+    const loopMode = this.queue.toggleLoop();
+    this.logPlayerEvent({
+      userId,
+      username,
+      eventType: "player",
+      action: "loop",
+      metadata: { loopMode },
+    });
+    this.onStateChange?.();
+    return loopMode;
+  }
+
+  async play(attempted = new Set<number>()) {
+    const generation = ++this.generation;
+    const track = this.queue.nowPlaying;
+    if (!track || attempted.has(this.queue.currentIndex)) {
       // nothing left to play in the queue
       this.isPlaying = false;
+      this.isPaused = false;
+      this.isLoading = false;
       this.onQueueEnd?.();
       return;
     }
+    attempted.add(this.queue.currentIndex);
+    this.isPlaying = true;
+    this.isLoading = true;
+    this.isPaused = false;
+    this.elapsed = 0;
+    this.onStateChange?.();
+    let activeStream: Readable | undefined;
     try {
       const provider = this.providers.find((p) => p.id === track.providerId);
       if (!provider) throw new Error(`No provider found for ${track.providerId}`);
 
       const loudness = await resolveTrackLoudness(track, provider);
+      if (generation !== this.generation) return;
       const trackWithLoudness = { ...track, loudness };
 
       let streamResult: Awaited<ReturnType<typeof resolveStream>>;
       try {
         streamResult = await resolveStream(this.guildId, track.id, provider);
       } catch (err) {
+        if (generation !== this.generation) return;
         if (!isUnplayableYouTubeStreamError(err, provider)) throw err;
         log({
           level: "WARN",
@@ -105,15 +196,24 @@ export class CorePlayer {
           },
         });
         this.isPlaying = false;
-        await this.next();
+        await this.next(false, attempted);
         return;
       }
       const { stream, fromCache } = streamResult;
+      activeStream = stream;
+      if (generation !== this.generation) {
+        stream.destroy();
+        return;
+      }
       this.isPlaying = true;
       this.fromCache = fromCache;
       const onStream = this.onStream;
       if (onStream) {
-        await onStream(trackWithLoudness, stream);
+        await onStream(trackWithLoudness, stream, () => generation === this.generation);
+        if (generation !== this.generation) {
+          stream.destroy();
+          return;
+        }
         this.logPlayerEvent({
           userId: track.addedBy,
           username: track.addedByUsername,
@@ -124,12 +224,17 @@ export class CorePlayer {
           metadata: { providerId: track.providerId },
         });
       }
+      this.startedAt = Date.now();
+      this.isLoading = false;
+      this.onStateChange?.();
       log({
         component: "CORE",
         name: "PLAYER",
         message: `Playing ${track.providerId}:${track.id} from ${fromCache ? "cache" : "provider"}`,
       });
     } catch (err) {
+      activeStream?.destroy();
+      if (generation !== this.generation) return;
       this.isPlaying = false;
       this.logPlayerEvent({
         userId: track.addedBy,
@@ -144,18 +249,26 @@ export class CorePlayer {
         },
       });
       this.onError?.(track, err instanceof Error ? err : new Error(String(err)));
-      await this.next();
+      await this.next(false, attempted);
     }
   }
 
-  async next() {
-    this.queue.currentIndex++;
-    await this.play();
+  async next(naturalFinish = false, attempted = new Set<number>()) {
+    this.queue.advance(naturalFinish);
+    await this.play(attempted);
+  }
+
+  async finish(failed = false) {
+    if (failed) this.failedTracks.add(this.queue.currentIndex);
+    else this.failedTracks.clear();
+    await this.next(!failed, new Set(this.failedTracks));
   }
 
   async skip(userId: string, idx?: number, username?: string) {
+    if (this.isLoading) return;
     const track = this.queue.nowPlaying;
     if (!track) return;
+    this.failedTracks.clear();
     this.logPlayerEvent({
       userId,
       username,
@@ -164,16 +277,18 @@ export class CorePlayer {
       trackId: track.id,
       trackName: track.title,
     });
-    if (idx === undefined) await this.next();
+    if (idx === undefined) await this.next(false);
     else await this.jump(idx);
   }
 
   async jump(idx: number) {
+    this.failedTracks.clear();
     this.queue.currentIndex = idx;
     await this.play();
   }
 
   async stop(userId: string | null = null, username?: string) {
+    this.generation++;
     if (this.queue.tracks.length || this.isPlaying) {
       this.logPlayerEvent({
         userId,
@@ -186,9 +301,13 @@ export class CorePlayer {
       });
     }
     this.isPlaying = false;
+    this.isLoading = false;
+    this.isPaused = false;
     this.fromCache = null;
     this.queue.currentIndex = 0;
     this.queue.tracks = [];
+    this.queue.loopMode = "off";
+    this.failedTracks.clear();
     this.onStop?.();
   }
 

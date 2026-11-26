@@ -263,10 +263,35 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
       };
       const memberCookie = cookieFor("ordinary-user");
       const ownerCookie = cookieFor("258189484053495809");
+      const { getOrCreateSession } = await import("@/core/manager");
+      for (const [id, title] of [
+        ["managed", "Managed song"],
+        ["member", "Private song"],
+      ]) {
+        const session = getOrCreateSession(id);
+        session.queue.tracks = Array.from({ length: 8 }, (_, index) => ({
+          id: `${id}-${index}`,
+          title: index ? `Next ${index}` : title,
+          providerId: "test",
+          url: "https://example.com/song",
+          thumbnailUrl: "",
+          channelName: "Artist",
+          length: 60,
+          loudness: 0,
+          playlistIdx: null,
+          addedBy: "listener",
+        }));
+        session.player.isPlaying = true;
+        session.player.onPosition = () => 15;
+      }
       const request = (uri: string, cookie: string) =>
         originalFetch(`${origin}${uri}`, { headers: { Cookie: cookie }, redirect: "manual" });
       const memberStats = await request("/api/dashboard/guilds", memberCookie);
       const memberBody = await memberStats.json();
+      assert.equal(memberBody.guilds[0].player.track.title, "Managed song");
+      assert.equal(memberBody.guilds[0].player.progressSeconds, 15);
+      assert.equal(memberBody.guilds[0].player.nextTracks.length, 5);
+      assert.equal(JSON.stringify(memberBody).includes("Private song"), false);
       assert.equal(
         memberBody.guilds[0].iconUrl,
         "https://cdn.discordapp.com/icons/managed/guild-icon-hash.png",
@@ -291,6 +316,12 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
       assert.equal((await request("/api/admin/guilds/member/summary", memberCookie)).status, 403);
       const overview = await request("/api/admin/guilds", ownerCookie);
       const overviewBody = await overview.json();
+      assert(
+        overviewBody.guilds.some(
+          (guild: { player: { track: { title: string } } | null }) =>
+            guild.player?.track.title === "Private song",
+        ),
+      );
       assert.equal(overviewBody.guilds[0].iconUrl, memberBody.guilds[0].iconUrl);
       assert.deepEqual(
         overviewBody.guilds.map((guild: { id: string }) => guild.id),
