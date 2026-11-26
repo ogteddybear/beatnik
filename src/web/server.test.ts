@@ -179,6 +179,17 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
     assert.equal(unauthorizedAdmin.headers.get("location"), "/");
     assert.equal((await fetch(`http://127.0.0.1:${address.port}/api/admin/guilds`)).status, 401);
     const origin = `http://127.0.0.1:${address.port}`;
+    const faviconRedirect = await fetch(`${origin}/favicon.ico`, { redirect: "manual" });
+    assert.equal(faviconRedirect.status, 302);
+    assert.equal(faviconRedirect.headers.get("location"), "/static/icon.svg");
+    const iconResponse = await fetch(`${origin}/static/icon.svg`);
+    assert.equal(iconResponse.status, 200);
+    assert.match(iconResponse.headers.get("content-type") ?? "", /image\/svg\+xml/);
+    assert.equal(iconResponse.headers.get("cache-control"), "public, max-age=86400");
+    assert.equal(
+      await (await fetch(`${origin}/static/favicon.svg`)).text(),
+      await iconResponse.text(),
+    );
     const invite = await fetch(`${origin}/invite`, { redirect: "manual" });
     assert.equal(invite.status, 302);
     const inviteCookie = invite.headers.get("set-cookie")?.split(";")[0];

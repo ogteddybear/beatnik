@@ -1,4 +1,4 @@
-const CACHE = "sashimi-public-v1";
+const CACHE = "sashimi-public-v2";
 const ASSETS = [
   "/static/offline.html",
   "/static/icon.svg",

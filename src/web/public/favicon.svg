@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <style>@media (prefers-color-scheme: light) { .tile { stroke: #a9bded; stroke-width: 32; } }</style>
+  <rect class="tile" width="512" height="512" rx="96" fill="#101827"/>
+  <g fill="#a9bded">
+    <path d="M248 96h64v260h-64z M296 96l104 48v72l-104-48z"/>
+    <ellipse cx="208" cy="352" rx="96" ry="64" transform="rotate(-18 208 352)"/>
+  </g>
+</svg>

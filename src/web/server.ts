@@ -287,7 +287,16 @@ export function createWebServer(
   app.disable("x-powered-by");
   app.set("view engine", "ejs");
   app.set("views", path.join(process.cwd(), "src", "web", "views"));
-  app.use("/static", express.static(path.join(process.cwd(), "src", "web", "public")));
+  app.get("/favicon.ico", (_req, res) => res.redirect(302, "/static/icon.svg"));
+  app.use(
+    "/static",
+    express.static(path.join(process.cwd(), "src", "web", "public"), {
+      setHeaders(res, filePath) {
+        if (["icon.svg", "favicon.svg"].includes(path.basename(filePath)))
+          res.setHeader("Cache-Control", "public, max-age=86400");
+      },
+    }),
+  );
   app.use(
     session({
       store: new SQLiteStoreFactory({
