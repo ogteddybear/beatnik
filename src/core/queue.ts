@@ -22,9 +22,11 @@ export class Queue {
   tracks: QueuedTrack[] = [];
   currentIndex = 0;
   loopMode: LoopMode = "off";
+  onChange?: () => void;
 
   toggleLoop(): LoopMode {
     this.loopMode = this.loopMode === "off" ? "track" : this.loopMode === "track" ? "queue" : "off";
+    this.onChange?.();
     return this.loopMode;
   }
 
@@ -33,6 +35,7 @@ export class Queue {
     this.currentIndex++;
     if (this.loopMode === "queue" && this.tracks.length && this.currentIndex >= this.tracks.length)
       this.currentIndex = 0;
+    this.onChange?.();
     return !!this.nowPlaying;
   }
 
@@ -45,10 +48,18 @@ export class Queue {
 
   insert(track: QueuedTrack, start: number) {
     this.tracks.splice(start, 0, track);
+    this.onChange?.();
   }
 
-  remove(idx: number) {
-    return this.tracks.splice(idx, 1);
+  insertMany(tracks: QueuedTrack[], start: number) {
+    this.tracks.splice(start, 0, ...tracks);
+    this.onChange?.();
+  }
+
+  remove(idx: number, notify = true) {
+    const removed = this.tracks.splice(idx, 1);
+    if (notify) this.onChange?.();
+    return removed;
   }
 
   shuffle() {
@@ -56,6 +67,7 @@ export class Queue {
     const after = this.tracks.slice(this.currentIndex + 1);
     const shuffled = shuffleArray(after);
     this.tracks = [...before, ...shuffled];
+    this.onChange?.();
   }
 
   getPage(pageNumber: number) {

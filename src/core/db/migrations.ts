@@ -1,6 +1,38 @@
 import { log } from "@/shared";
 import type { Database } from "better-sqlite3";
 
+export const applicationStateSchema = `
+  CREATE TABLE IF NOT EXISTS GuildSessionState (
+    guild_id TEXT PRIMARY KEY, voice_channel_id TEXT, text_channel_id TEXT,
+    queue_json TEXT NOT NULL, current_index INTEGER NOT NULL, loop_mode TEXT NOT NULL,
+    is_paused INTEGER NOT NULL, updated_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS UserPlaylist (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id TEXT NOT NULL,
+    name TEXT NOT NULL COLLATE NOCASE, created_at INTEGER NOT NULL,
+    UNIQUE(owner_id, name)
+  );
+  CREATE TABLE IF NOT EXISTS UserPlaylistTrack (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    playlist_id INTEGER NOT NULL REFERENCES UserPlaylist(id) ON DELETE CASCADE,
+    provider_id TEXT NOT NULL, track_id TEXT NOT NULL, title TEXT NOT NULL,
+    url TEXT NOT NULL, duration REAL NOT NULL,
+    channel_name TEXT NOT NULL DEFAULT '', thumbnail_url TEXT NOT NULL DEFAULT ''
+  );
+  CREATE INDEX IF NOT EXISTS idx_user_playlist_tracks ON UserPlaylistTrack(playlist_id, id);
+`;
+export const spotifyUserSchema = `
+  CREATE TABLE IF NOT EXISTS SpotifyUserTokens (
+    discord_user_id TEXT PRIMARY KEY, access_token TEXT NOT NULL,
+    refresh_token TEXT NOT NULL, expires_at INTEGER NOT NULL,
+    spotify_user_id TEXT, spotify_display_name TEXT, updated_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS SpotifyOAuthState (
+    state_hash TEXT PRIMARY KEY, discord_user_id TEXT NOT NULL,
+    session_id TEXT NOT NULL, expires_at INTEGER NOT NULL, consumed INTEGER NOT NULL DEFAULT 0
+  );
+`;
+
 interface Migration {
   name: string;
   up: (db: Database) => void;
@@ -102,6 +134,18 @@ const migrations: Migration[] = [
         guild_id TEXT PRIMARY KEY,
         max_storage_bytes INTEGER NOT NULL DEFAULT 104857600 CHECK (max_storage_bytes >= 0)
       )`);
+    },
+  },
+  {
+    name: "006_sessions_and_user_playlists",
+    up: (db) => {
+      db.exec(applicationStateSchema);
+    },
+  },
+  {
+    name: "007_spotify_user_tokens",
+    up: (db) => {
+      db.exec(spotifyUserSchema);
     },
   },
 ];

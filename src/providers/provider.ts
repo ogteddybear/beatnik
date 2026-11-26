@@ -1,6 +1,9 @@
 import type { Readable } from "node:stream";
 
 export type QueryType = "track" | "playlist" | "search";
+export interface ProviderContext {
+  requestingUserId?: string;
+}
 
 export interface ProviderTrack {
   providerId: string;
@@ -38,7 +41,7 @@ export interface Provider {
    * `resolvedQuery` may differ from `input`, for example, a YouTube URL will be resolved to its
    * video/playlist ID for direct use in subsequent provider operations.
    */
-  resolve: (query: string) => Promise<ResolvedQuery | null>;
+  resolve: (query: string, context?: ProviderContext) => Promise<ResolvedQuery | null>;
 
   /**
    * Fetches metadata for a single track.
@@ -50,7 +53,10 @@ export interface Provider {
    * Fetches metadata for a playlist including its tracks.
    * @param resolvedQuery - The resolved query string from {@link Provider.resolve}.
    */
-  getPlaylist: (resolvedQuery: string) => Promise<ProviderPlaylist | null>;
+  getPlaylist: (
+    resolvedQuery: string,
+    context?: ProviderContext,
+  ) => Promise<ProviderPlaylist | null>;
 
   getStream: (uniqueId: string) => Promise<Readable>;
   search?: (query: string) => Promise<ProviderTrack | null>;

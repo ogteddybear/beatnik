@@ -12,6 +12,7 @@
           <h1 class="display-6 fw-bold mb-0">All bot servers</h1>
         </div>
         <a class="btn btn-outline-light" href="/dashboard">Back to dashboard</a>
+        <a class="btn btn-outline-light" href="/api/admin/export/events">Export Event Log (CSV)</a>
       </header>
       <p class="text-secondary admin-description">Every server listening with Sashimi. Open a server to explore its activity and analytics.</p>
       <%- include('infrastructure', { infrastructure: typeof infrastructure === 'undefined' ? null : infrastructure }) %>

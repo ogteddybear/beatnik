@@ -1,4 +1,5 @@
 import type { Provider, ProviderPlaylist, ProviderTrack } from "@/providers";
+import type { ProviderContext } from "@/providers/provider";
 import { log } from "@/shared";
 import type { Readable } from "node:stream";
 
@@ -37,7 +38,10 @@ async function resolveTrackMetadata(id: string, provider: Provider): Promise<Pro
 async function resolvePlaylistMetadata(
   id: string,
   provider: Provider,
+  context?: ProviderContext,
 ): Promise<ProviderPlaylist | null> {
+  // Spotify visibility is user-specific; bypass the shared metadata cache.
+  if (provider.id === "spotify-link-resolver") return provider.getPlaylist(id, context);
   // prefer database metadata, then provider method
   const dbPlaylist = playlists.getTracks(id);
   if (dbPlaylist) {
@@ -112,9 +116,13 @@ export async function resolveTrackLoudness(
  * @param returnMetadata - Whether to return resolved metadata against database + provider.
  * @returns The resolved query (such as a parsed ID from a URL), along with the metadata and matched {@link Provider}.
  */
-export async function resolveQuery(input: string, returnMetadata = true): Promise<ResolveResult> {
+export async function resolveQuery(
+  input: string,
+  returnMetadata = true,
+  context?: ProviderContext,
+): Promise<ResolveResult> {
   for (const provider of providers) {
-    const resolution = await provider.resolve(input);
+    const resolution = await provider.resolve(input, context);
     if (!resolution) continue;
     const { resolvedQuery, type } = resolution;
     switch (type) {
@@ -127,7 +135,9 @@ export async function resolveQuery(input: string, returnMetadata = true): Promis
         };
       case "playlist":
         return {
-          metadata: returnMetadata ? await resolvePlaylistMetadata(resolvedQuery, provider) : null,
+          metadata: returnMetadata
+            ? await resolvePlaylistMetadata(resolvedQuery, provider, context)
+            : null,
           type,
           resolvedQuery,
           provider,

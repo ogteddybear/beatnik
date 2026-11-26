@@ -133,7 +133,25 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
       };
     }
   >();
-  const server = createWebServer(client, (id) => remoteSessions.get(id)).listen(0, "127.0.0.1");
+  let resolvedTrackCalls = 0;
+  const server = createWebServer(
+    client,
+    (id) => remoteSessions.get(id),
+    async () => {
+      resolvedTrackCalls++;
+      return {
+        id: "custom-track",
+        providerId: "test",
+        title: "Custom song",
+        url: "https://youtube.com/watch?v=custom",
+        length: 120,
+        channelName: "Artist",
+        thumbnailUrl: "",
+        loudness: null,
+        playlistIdx: null,
+      };
+    },
+  ).listen(0, "127.0.0.1");
   try {
     await new Promise<void>((resolve) => server.once("listening", resolve));
     const address = server.address();
@@ -270,7 +288,7 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
             JSON.stringify({
               cookie: { originalMaxAge: 60_000, expires: new Date(Date.now() + 60_000), path: "/" },
               passport: {
-                user: { id, username: "Test", avatar: null, accessToken: "test-access" },
+                user: { id, username: "Test", avatar: "test-avatar", accessToken: "test-access" },
               },
             }),
           );
@@ -466,6 +484,133 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
       assert.equal(archivedBody.events.length, 1);
       assert.equal(archivedBody.events[0].username, "Archived listener");
       assert.equal(archivedBody.events[0].trackName, "Archived song");
+      const playlistRequest = (
+        path: string,
+        method: string,
+        body?: unknown,
+        cookie = memberCookie,
+        header = true,
+      ) =>
+        originalFetch(`${origin}${path}`, {
+          method,
+          headers: {
+            Cookie: cookie,
+            "Content-Type": "application/json",
+            ...(header ? { "X-Sashimi-Request": "playlists" } : {}),
+          },
+          ...(body ? { body: JSON.stringify(body) } : {}),
+        });
+      assert.equal((await request("/api/playlists", "")).status, 401);
+      assert.equal((await request("/playlists", memberCookie)).status, 200);
+      assert.equal(
+        (
+          await playlistRequest(
+            "/api/playlists",
+            "POST",
+            { name: "No header" },
+            memberCookie,
+            false,
+          )
+        ).status,
+        403,
+      );
+      assert.equal((await playlistRequest("/api/playlists", "POST", { name: "" })).status, 400);
+      const created = await playlistRequest("/api/playlists", "POST", { name: "Chill Vibes" });
+      assert.equal(created.status, 201);
+      const custom = (await created.json()).playlist;
+      assert.equal(
+        (await playlistRequest("/api/playlists", "POST", { name: "chill vibes" })).status,
+        409,
+      );
+      assert.equal(
+        (await (await request("/api/playlists", ownerCookie)).json()).playlists.length,
+        0,
+      );
+      assert.equal(
+        (
+          await playlistRequest(
+            `/api/playlists/${custom.id}/tracks`,
+            "POST",
+            { url: "https://youtube.com/watch?v=a" },
+            ownerCookie,
+          )
+        ).status,
+        404,
+      );
+      assert.equal(
+        (await playlistRequest(`/api/playlists/${custom.id}`, "DELETE", undefined, ownerCookie))
+          .status,
+        404,
+      );
+      assert.equal(
+        resolvedTrackCalls,
+        0,
+        "Other users cannot trigger metadata lookups against a private playlist",
+      );
+      assert.equal(
+        (
+          await playlistRequest(`/api/playlists/${custom.id}/tracks`, "POST", {
+            url: "http://127.0.0.1/private",
+          })
+        ).status,
+        400,
+      );
+      const added = await playlistRequest(`/api/playlists/${custom.id}/tracks`, "POST", {
+        url: "https://youtube.com/watch?v=a",
+        provider_id: "forged",
+      });
+      assert.equal(added.status, 200);
+      assert.equal((await added.json()).playlist.tracks[0].providerId, "test");
+      assert.equal(resolvedTrackCalls, 1);
+      assert.equal(
+        (
+          await playlistRequest("/api/playlists", "POST", {
+            name: "Private queue",
+            guildId: "member",
+          })
+        ).status,
+        403,
+      );
+      const snapshot = await playlistRequest("/api/playlists", "POST", {
+        name: "Queue snapshot",
+        guildId: "managed",
+      });
+      assert.equal(snapshot.status, 201);
+      assert.equal((await snapshot.json()).playlist.tracks.length, 8);
+      assert.equal((await playlistRequest(`/api/playlists/${custom.id}`, "DELETE")).status, 204);
+      assert.equal(
+        db
+          .prepare<[], { count: number }>(
+            "SELECT count(*) AS count FROM UserPlaylistTrack WHERE playlist_id = " +
+              Number(custom.id),
+          )
+          .get()?.count,
+        0,
+      );
+
+      logEvent({
+        guildId: "managed",
+        username: '=HYPERLINK("bad")',
+        eventType: "player",
+        action: "play",
+        trackName: 'Song,"line"\nTwo',
+        metadata: { note: "CSV" },
+      });
+      assert.equal((await request("/api/admin/export/events", "")).status, 401);
+      assert.equal((await request("/api/admin/export/events", memberCookie)).status, 403);
+      const exported = await request("/api/admin/export/events", ownerCookie);
+      assert.equal(exported.status, 200);
+      assert.match(exported.headers.get("content-type") ?? "", /text\/csv/);
+      assert.match(exported.headers.get("content-disposition") ?? "", /attachment/);
+      const csv = await exported.text();
+      assert(
+        csv.startsWith(
+          "Timestamp,Guild ID,User ID,Username,Event Type,Action,Track Name,Metadata\r\n",
+        ),
+      );
+      assert.match(csv, /Archived song/, "Export includes archived rows");
+      assert.match(csv, /Song,""line""\nTwo/);
+      assert.match(csv, /'=HYPERLINK/);
       const control = (body: unknown, cookie = memberCookie, guild = "managed", header = true) =>
         originalFetch(`${origin}/api/dashboard/guilds/${guild}/control`, {
           method: "POST",

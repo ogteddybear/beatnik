@@ -1,24 +1,33 @@
 import { calculateGuildStorage, guildStorageSummary } from "@/core/cache/storage";
 import { config } from "@/core/config";
+import { resolveCustomPlaylistTrack, supportedTrackUrl } from "@/core/custom-playlists";
 import {
   type EventFilters,
+  eventExportBoundary,
+  eventExportPage,
   guildEventCounts,
   guildEventPage,
   recentGuildCounts,
 } from "@/core/db/guild-events";
 import { MB, setGuildStorageLimit } from "@/core/db/guild-settings";
 import { guildStats } from "@/core/db/guild-stats";
-import { getGuildPlayerState } from "@/core/manager";
+import { spotifyUsers } from "@/core/db/spotify-users";
+import { userPlaylists } from "@/core/db/user-playlists";
+import { getGuildPlayerState, getSession } from "@/core/manager";
 import { getPlayerControlSession } from "@/discord/player-buttons";
+import type { ProviderTrack } from "@/providers";
 import SQLiteStore from "connect-sqlite3";
 import { DiscordScope, Strategy as DiscordStrategy } from "discord-strategy";
 import type { Client } from "discord.js";
 import express from "express";
 import session from "express-session";
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import { once } from "node:events";
 import path from "node:path";
+import { setImmediate } from "node:timers/promises";
 import passport from "passport";
 
+import { EVENTS_CSV_HEADER, eventCsvRow } from "./events-csv";
 import {
   INVITE_CONFIRMATION_TTL,
   type InviteResult,
@@ -27,6 +36,7 @@ import {
   invitePresentation,
 } from "./invite";
 import { getInfrastructureMetrics } from "./metrics";
+import { mountSpotifyAuth } from "./spotify-auth";
 
 interface DashboardUser {
   id: string;
@@ -219,7 +229,11 @@ function safeEventDetails(metadata: string | null): string {
   }
 }
 
-export function createWebServer(client: Client, controlSession = getPlayerControlSession) {
+export function createWebServer(
+  client: Client,
+  controlSession = getPlayerControlSession,
+  resolveTrack = resolveCustomPlaylistTrack,
+) {
   const clientID = process.env.DISCORD_CLIENT_ID || config.discord.clientId;
   const clientSecret = requiredEnv("DISCORD_CLIENT_SECRET");
   const callbackURL = requiredEnv("DISCORD_REDIRECT_URI");
@@ -278,6 +292,9 @@ export function createWebServer(client: Client, controlSession = getPlayerContro
   );
   app.use(auth.initialize());
   app.use(auth.session());
+  mountSpotifyAuth(app, (req) =>
+    req.isAuthenticated() && isDashboardUser(req.user) ? req.user.id : null,
+  );
 
   app.get("/", (req, res) => {
     if (req.isAuthenticated()) return res.redirect("/dashboard");
@@ -465,7 +482,132 @@ export function createWebServer(client: Client, controlSession = getPlayerContro
       guilds,
       inviteUrl: "/invite",
       isAdmin: req.user.id === ADMIN_USER_ID,
+      spotifyAccount: spotifyUsers.summary(req.user.id),
     });
+  });
+  app.get("/playlists", (req, res) => {
+    if (!req.isAuthenticated() || !isDashboardUser(req.user)) return res.redirect("/");
+    res.set("Cache-Control", "private, no-store");
+    return res.render("playlists", {
+      username: req.user.username,
+      avatarUrl: avatarUrlFor(req.user),
+      isAdmin: req.user.id === ADMIN_USER_ID,
+    });
+  });
+  const playlistAuth: express.RequestHandler = (req, res, next) => {
+    res.set("Cache-Control", "private, no-store");
+    if (!req.isAuthenticated() || !isDashboardUser(req.user)) {
+      res.sendStatus(401);
+      return;
+    }
+    if (
+      req.method !== "GET" &&
+      (req.get("X-Sashimi-Request") !== "playlists" ||
+        (req.method !== "DELETE" && !req.is("application/json")))
+    ) {
+      res.sendStatus(403);
+      return;
+    }
+    next();
+  };
+  app.get("/api/playlists", playlistAuth, (req, res) => {
+    if (!isDashboardUser(req.user)) return res.sendStatus(401);
+    return res.json({ playlists: userPlaylists.list(req.user.id) });
+  });
+  app.post("/api/playlists", playlistAuth, express.json({ limit: "16kb" }), async (req, res) => {
+    if (!isDashboardUser(req.user)) return res.sendStatus(401);
+    const name: unknown = req.body?.name;
+    if (typeof name !== "string" || !name.trim() || name.trim().length > 100)
+      return res.status(400).json({ error: "Use a playlist name of 1–100 characters." });
+    let tracks: ProviderTrack[] = [];
+    if (req.body.guildId !== undefined) {
+      if (typeof req.body.guildId !== "string") return res.sendStatus(400);
+      try {
+        const guilds = await visibleGuilds(req);
+        if (!guilds) return res.sendStatus(401);
+        if (!guilds.some((guild) => guild.id === req.body.guildId)) return res.sendStatus(403);
+      } catch {
+        return res.sendStatus(502);
+      }
+      const queue = getSession(req.body.guildId)?.queue;
+      if (!queue?.nowPlaying)
+        return res.status(409).json({ error: "There is no current queue to save." });
+      tracks = queue.tracks.slice(queue.currentIndex);
+      if (tracks.length > 1000)
+        return res.status(400).json({ error: "Playlists support at most 1000 tracks." });
+    }
+    try {
+      const id = userPlaylists.create(req.user.id, name, tracks);
+      return res.status(201).json({ playlist: userPlaylists.get(req.user.id, id) });
+    } catch {
+      return res
+        .status(409)
+        .json({ error: "Playlist name already exists or your playlist limit was reached." });
+    }
+  });
+  app.post(
+    "/api/playlists/:id/tracks",
+    playlistAuth,
+    express.json({ limit: "16kb" }),
+    async (req, res) => {
+      if (!isDashboardUser(req.user)) return res.sendStatus(401);
+      const id = Number(req.params.id);
+      if (!Number.isSafeInteger(id) || id < 1 || !userPlaylists.get(req.user.id, id))
+        return res.sendStatus(404);
+      const url: unknown = req.body?.url;
+      if (!supportedTrackUrl(url))
+        return res
+          .status(400)
+          .json({ error: "Use a supported HTTPS YouTube, SoundCloud or Spotify track URL." });
+      try {
+        const track = await resolveTrack(url);
+        if (!track)
+          return res
+            .status(400)
+            .json({ error: "No track found. Playlist URLs are not supported here." });
+        if (!userPlaylists.add(req.user.id, id, track)) return res.sendStatus(404);
+        return res.json({ playlist: userPlaylists.get(req.user.id, id) });
+      } catch {
+        return res
+          .status(502)
+          .json({ error: "Track metadata is unavailable or the track limit was reached." });
+      }
+    },
+  );
+  app.delete("/api/playlists/:id", playlistAuth, (req, res) => {
+    if (!isDashboardUser(req.user)) return res.sendStatus(401);
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id < 1 || !userPlaylists.delete(req.user.id, id))
+      return res.sendStatus(404);
+    return res.sendStatus(204);
+  });
+  app.get("/api/admin/export/events", async (req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    if (!req.isAuthenticated() || !isDashboardUser(req.user)) return res.sendStatus(401);
+    if (req.user.id !== ADMIN_USER_ID) return res.sendStatus(403);
+    const through = eventExportBoundary();
+    const abort = new AbortController();
+    res.once("close", () => abort.abort());
+    res.type("text/csv").attachment("sashimi-events.csv");
+    res.write(EVENTS_CSV_HEADER);
+    try {
+      let after = 0;
+      while (!res.destroyed) {
+        // Bounded pages release SQLite read locks before waiting on the network.
+        // Preserved event IDs keep pagination stable while the archiver moves rows.
+        const events = eventExportPage(after, through);
+        if (!events.length) break;
+        for (const event of events) {
+          if (res.destroyed) return;
+          if (!res.write(eventCsvRow(event))) await once(res, "drain", { signal: abort.signal });
+        }
+        after = events[events.length - 1].id;
+        await setImmediate();
+      }
+      res.end();
+    } catch {
+      if (!res.destroyed) res.destroy();
+    }
   });
   app.get("/api/dashboard/guilds", async (req, res) => {
     res.set("Cache-Control", "private, no-store");

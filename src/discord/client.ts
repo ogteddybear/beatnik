@@ -98,15 +98,33 @@ async function handleInteraction(interaction: Interaction) {
         await interaction.editReply(errorReply(err, false) as InteractionEditReplyOptions);
       } else {
         await interaction.reply(
-          errorReply(err, interaction.ephemeral ?? false) as InteractionReplyOptions,
+          errorReply(
+            err,
+            interaction.commandName === "spotify" || (interaction.ephemeral ?? false),
+          ) as InteractionReplyOptions,
         );
       }
     }
   }
 }
 
-async function handleVoiceStateUpdate(oldState: VoiceState) {
-  if (oldState.channel?.members.size === 1) {
+export async function handleVoiceStateUpdate(oldState: VoiceState, newState: VoiceState) {
+  if (
+    oldState.id === oldState.client.user.id &&
+    oldState.channelId &&
+    oldState.channelId !== newState.channelId
+  ) {
+    try {
+      await getSession(oldState.guild.id)?.player.stop();
+    } catch {
+      console.warn("Unable to clean up a departed voice session.");
+    }
+    return;
+  }
+  if (
+    oldState.channel?.members.size === 1 &&
+    oldState.channel.members.has(oldState.client.user.id)
+  ) {
     try {
       const session = getSession(oldState.guild.id);
       await session?.player.stop();

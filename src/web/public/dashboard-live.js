@@ -15,6 +15,7 @@
   let summaryLoaded = false;
   let activityLoaded = false;
   const pendingControls = new Map();
+  const pendingSaves = new Set();
   let playerGuilds = [];
   const list = document.getElementById("guild-list");
 
@@ -344,6 +345,16 @@
         controls.append(button);
       }
       card.append(controls);
+      const save = document.createElement("button");
+      save.type = "button";
+      save.dataset.saveQueue = "";
+      save.className = "btn btn-sm btn-outline-light mt-2";
+      save.textContent = pendingSaves.has(guild.id)
+        ? "Saving queue…"
+        : "Save Current Queue to Playlist";
+      save.disabled = pendingSaves.has(guild.id);
+      save.addEventListener("click", () => void saveQueuePlaylist(guild.id));
+      card.append(save);
       if (state.nextTracks.length) {
         const label = document.createElement("p");
         label.className = "small text-secondary mt-3 mb-1";
@@ -405,6 +416,34 @@
           : error.message;
     } finally {
       pendingControls.delete(guildId);
+      refreshPlayers(playerGuilds);
+    }
+  }
+
+  async function saveQueuePlaylist(guildId) {
+    if (pendingSaves.has(guildId)) return;
+    const name = window.prompt("Name for your new playlist:");
+    if (!name?.trim()) return;
+    const feedback = document.getElementById("player-control-status");
+    pendingSaves.add(guildId);
+    refreshPlayers(playerGuilds);
+    try {
+      const response = await fetch("/api/playlists", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-Sashimi-Request": "playlists" },
+        body: JSON.stringify({ name: name.trim(), guildId }),
+      });
+      if (!response.ok)
+        throw new Error(
+          "Could not save the queue. Check permissions, playlist name, and queue availability.",
+        );
+      feedback.textContent =
+        "Queue saved. Open Playlists to view it or use /load custom name: in Discord.";
+    } catch (error) {
+      feedback.textContent = error.message;
+    } finally {
+      pendingSaves.delete(guildId);
       refreshPlayers(playerGuilds);
     }
   }

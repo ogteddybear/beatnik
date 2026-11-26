@@ -67,6 +67,13 @@ export class VoiceSession {
     this.connection = createVoiceConnection(voiceChannel);
     this.subscription = this.connection.subscribe(this.audioPlayer);
     trackVoiceLifecycle(this.connection, this.guildId, voiceChannel, actor);
+    this.connection.once(VoiceConnectionStatus.Destroyed, () => {
+      if (!this.destroyed) {
+        this.destroy();
+        deleteVoiceSession(this.guildId);
+        deleteSession(this.guildId);
+      }
+    });
     if (textChannel?.isSendable()) {
       this.panel = new NowPlayingPanel(textChannel, corePlayer);
       this.panelTimer = setInterval(() => void this.panel?.refresh(), 15_000);
@@ -84,7 +91,7 @@ export class VoiceSession {
         this.resource.volume.setVolume((this.resource.volume.volume * percent) / 100);
     };
 
-    corePlayer.onStream = async (track, inputStream, isCurrent) => {
+    corePlayer.onStream = async (track, inputStream, isCurrent, startPaused) => {
       await entersState(this.connection, VoiceConnectionStatus.Ready, 10_000);
       if (this.destroyed || !isCurrent()) {
         inputStream.destroy();
@@ -106,6 +113,14 @@ export class VoiceSession {
       if (resource.volume)
         resource.volume.setVolume((resource.volume.volume * corePlayer.volume) / 100);
       this.audioPlayer.play(resource);
+      if (startPaused) {
+        await entersState(this.audioPlayer, AudioPlayerStatus.Playing, 10_000);
+        if (this.destroyed || !isCurrent()) {
+          this.audioPlayer.stop();
+          return;
+        }
+        this.audioPlayer.pause(false);
+      }
       this.trackFailed = false;
 
       const operator = decibels >= 0 ? "+" : "";
@@ -174,7 +189,7 @@ export class VoiceSession {
     void this.panel?.close();
     this.audioPlayer.stop();
     this.subscription?.unsubscribe();
-    this.connection.destroy();
+    if (this.connection.state.status !== VoiceConnectionStatus.Destroyed) this.connection.destroy();
   }
 
   isCurrentMessage(messageId: string) {

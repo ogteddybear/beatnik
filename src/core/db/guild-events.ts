@@ -133,6 +133,23 @@ export function getLatestEvents(limit = 100): GuildEvent[] {
   return latestEvents.all(Math.min(Math.max(Math.trunc(limit), 0), 100));
 }
 
+export function eventExportBoundary(): number {
+  return (
+    db.prepare<[], { id: number | null }>(`SELECT max(id) AS id FROM ${EVENT_HISTORY}`).get()?.id ??
+    0
+  );
+}
+export function eventExportPage(after: number, through: number): GuildEvent[] {
+  return db
+    .prepare<[number, number], GuildEvent>(
+      `
+    SELECT ${EVENT_COLUMNS} FROM ${EVENT_HISTORY} WHERE id > ? AND id <= ?
+    ORDER BY id LIMIT 500
+  `,
+    )
+    .all(after, through);
+}
+
 export function getGuildPlaybackHistory(guildId: string): GuildEvent[] {
   return db
     .prepare<[string], GuildEvent>(

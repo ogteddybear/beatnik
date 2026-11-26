@@ -5,6 +5,24 @@ export const builder = new SlashCommandBuilder()
   .setDescription("Load music from your library.")
   .addSubcommand((sc) =>
     sc
+      .setName("custom")
+      .setDescription("Load one of your web playlists.")
+      .addStringOption((option) =>
+        option
+          .setName("name")
+          .setDescription("Your custom playlist name.")
+          .setRequired(true)
+          .setAutocomplete(true),
+      )
+      .addBooleanOption((option) =>
+        option.setName("next").setDescription("Insert after the current track."),
+      )
+      .addBooleanOption((option) =>
+        option.setName("shuffle").setDescription("Shuffle before queuing."),
+      ),
+  )
+  .addSubcommand((sc) =>
+    sc
       .setName("playlist")
       .setDescription("Load a saved playlist.")
       .addIntegerOption((option) =>

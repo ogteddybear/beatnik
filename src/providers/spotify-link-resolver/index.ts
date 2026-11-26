@@ -2,7 +2,14 @@ import { log } from "@/shared";
 import type { Readable } from "node:stream";
 import { SpotDl } from "spotdl-api";
 
-import type { Provider, ProviderPlaylist, ProviderTrack, ResolvedQuery } from "../provider";
+import type {
+  Provider,
+  ProviderContext,
+  ProviderPlaylist,
+  ProviderTrack,
+  ResolvedQuery,
+} from "../provider";
+import { SpotifyApiError } from "../spotify/errors";
 import type { YoutubeProvider } from "../youtube";
 
 const API_BASE = "https://api.spotify.com/v1/";
@@ -170,11 +177,93 @@ export class SpotifyLinkResolver implements Provider {
     return this.search(resolvedQuery);
   }
 
-  async getPlaylist(resolvedQuery: string): Promise<ProviderPlaylist | null> {
+  async getPlaylist(
+    resolvedQuery: string,
+    context?: ProviderContext,
+  ): Promise<ProviderPlaylist | null> {
     const match = resolvedQuery.match(/^spotify:(album|playlist):([A-Za-z0-9]+)$/);
     if (!match) return null;
 
     const [, kind, id] = match;
+    if (kind === "playlist" && context?.requestingUserId) {
+      const { getValidSpotifyAccessToken } = await import("../spotify/tokens");
+      const userId = context.requestingUserId;
+      const token = await getValidSpotifyAccessToken(userId);
+      if (token) {
+        try {
+          const playlist = await this.getUserPlaylist(id, userId);
+          return {
+            providerId: this.id,
+            id,
+            url: `https://open.spotify.com/playlist/${id}`,
+            title: playlist.name,
+            authorName: playlist.owner,
+            tracks: await this.mapSpotifyTracks(playlist.tracks),
+          };
+        } catch (error) {
+          if (!(error instanceof SpotifyApiError) || ![401, 403, 404].includes(error.status)) {
+            this.logError(
+              "Spotify user playlist is temporarily unavailable",
+              new Error("Spotify API unavailable"),
+            );
+            return null;
+          }
+        }
+      }
+    }
+    return this.getPublicPlaylist(kind, id);
+  }
+
+  private async getUserPlaylist(id: string, userId: string) {
+    const { spotifyUserRequest } = await import("../spotify/user-api");
+    interface Page {
+      items?: { track?: SpotifyTrack | null; item?: SpotifyTrack | null; is_local?: boolean }[];
+      next?: string | null;
+    }
+    const info = await spotifyUserRequest<{
+      name?: string;
+      owner?: { display_name?: string };
+      tracks?: Page;
+      items?: Page;
+    }>(userId, `playlists/${id}`);
+    let page = info.items ?? info.tracks;
+    if (!page) throw new SpotifyApiError(403);
+    const tracks: SpotifyTrack[] = [];
+    const visited = new Set<string>();
+    for (let count = 0; count < 200; count++) {
+      for (const entry of page.items ?? []) {
+        const track = entry.item ?? entry.track;
+        if (
+          !entry.is_local &&
+          track?.id &&
+          track.type === "track" &&
+          typeof track.name === "string" &&
+          Array.isArray(track.artists) &&
+          track.artists.every((artist) => typeof artist.name === "string") &&
+          Number.isFinite(track.duration_ms)
+        )
+          tracks.push(track);
+      }
+      if (!page.next)
+        return {
+          name: info.name ?? "Spotify playlist",
+          owner: info.owner?.display_name ?? "Unknown",
+          tracks,
+        };
+      const next: URL = new URL(page.next, "https://api.spotify.com/v1/");
+      if (
+        next.origin !== "https://api.spotify.com" ||
+        !next.pathname.startsWith(`/v1/playlists/${id}/`) ||
+        visited.has(next.toString())
+      )
+        throw new SpotifyApiError(502);
+      visited.add(next.toString());
+      page = await spotifyUserRequest<Page>(userId, next.toString());
+    }
+    throw new SpotifyApiError(413);
+  }
+
+  private async getPublicPlaylist(kind: string, id: string): Promise<ProviderPlaylist | null> {
     const controller = new AbortController();
     const timeoutError = new Error("Spotify playlist resolution timed out after 15s");
     let timer: ReturnType<typeof setTimeout> | undefined;

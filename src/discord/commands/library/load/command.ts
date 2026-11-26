@@ -1,10 +1,24 @@
 import { playlists } from "@/core/db/playlist";
 import { tracks } from "@/core/db/track";
+import { userPlaylists } from "@/core/db/user-playlists";
 import type { AutocompleteHandler, CommandExecuter } from "@/discord/commands";
 import { enqueueAndPlay } from "@/discord/playback";
+import { enqueueTracksAndPlay } from "@/discord/playback";
 
 export const autocomplete: AutocompleteHandler = async (interaction) => {
   const focusedValue = interaction.options.getFocused(true);
+  if (focusedValue.name === "name") {
+    await interaction.respond(
+      userPlaylists
+        .list(interaction.user.id)
+        .filter((playlist) =>
+          playlist.name.toLowerCase().includes(String(focusedValue.value).toLowerCase()),
+        )
+        .slice(0, 25)
+        .map((playlist) => ({ name: playlist.name, value: playlist.name })),
+    );
+    return;
+  }
   if (focusedValue.name === "playlist") {
     const savedPlaylists = playlists.all();
     const choices = savedPlaylists.map((sp) => ({
@@ -36,6 +50,18 @@ export const execute: CommandExecuter = async (interaction) => {
   const subcommand = interaction.options.getSubcommand();
   const playNext = interaction.options.getBoolean("next") ?? false;
   let isShuffle = interaction.options.getBoolean("shuffle") ?? false;
+  if (subcommand === "custom") {
+    const playlist = userPlaylists.byName(
+      interaction.user.id,
+      interaction.options.getString("name", true),
+    );
+    if (!playlist?.tracks.length) {
+      await interaction.editReply("No non-empty custom playlist found with that name.");
+      return;
+    }
+    await enqueueTracksAndPlay(interaction, playlist.tracks, { shuffle: isShuffle, playNext });
+    return;
+  }
 
   const queryUrls: string[] = [];
 

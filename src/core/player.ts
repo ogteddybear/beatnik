@@ -1,4 +1,5 @@
 import type { Provider, ProviderTrack } from "@/providers";
+import { SpotifyPlaylistUnavailableError } from "@/providers/spotify/errors";
 import { log } from "@/shared";
 import type { Readable } from "node:stream";
 
@@ -42,11 +43,19 @@ export class CorePlayer {
   onPause?: (paused: boolean) => boolean;
   onPosition?: () => number;
   onStateChange?: () => void;
+  onPersist?: () => void;
+  restorePaused = false;
+
+  private notifyStateChange() {
+    this.onPersist?.();
+    this.onStateChange?.();
+  }
 
   onStream?: (
     track: ProviderTrack,
     stream: Readable,
     isCurrent: () => boolean,
+    startPaused: boolean,
   ) => void | Promise<void>;
   onQueueEnd?: () => void;
   onStop?: () => void;
@@ -67,13 +76,27 @@ export class CorePlayer {
     playNext = false,
     username?: string,
   ): Promise<QueuedTrack[]> {
-    const { metadata, type } = await resolveQuery(query);
+    const { metadata, type, provider } = await resolveQuery(query, true, {
+      requestingUserId: userId,
+    });
     let tracks: ProviderTrack[] = [];
     if (type === "playlist") {
+      if (!metadata && provider.id === "spotify-link-resolver")
+        throw new SpotifyPlaylistUnavailableError();
       tracks = metadata?.tracks || [];
     } else if (metadata) {
       tracks = [metadata];
     }
+    return this.enqueueTracks(tracks, userId, willShuffle, playNext, username);
+  }
+
+  enqueueTracks(
+    tracks: ProviderTrack[],
+    userId: string,
+    willShuffle = false,
+    playNext = false,
+    username?: string,
+  ): QueuedTrack[] {
     if (willShuffle) tracks = shuffleArray(tracks);
     // Explicit playNext inserts after the current track; otherwise preserve FIFO by appending.
     const basis = playNext ? this.queue.currentIndex + 1 : this.queue.tracks.length;
@@ -83,10 +106,8 @@ export class CorePlayer {
       addedByUsername: username,
     }));
     guildStats.recordRequests(this.guildId, userId, queuedTracks, username);
-    return queuedTracks.map((queuedTrack, idx) => {
-      this.queue.insert(queuedTrack, basis + idx);
-      return queuedTrack;
-    });
+    this.queue.insertMany(queuedTracks, basis);
+    return queuedTracks;
   }
 
   getState(): PlayerState | null {
@@ -120,7 +141,7 @@ export class CorePlayer {
     this.elapsed += (Date.now() - this.startedAt) / 1000;
     this.isPaused = true;
     this.logPlayerEvent({ userId, username, eventType: "player", action: "pause" });
-    this.onStateChange?.();
+    this.notifyStateChange();
     return true;
   }
 
@@ -129,7 +150,7 @@ export class CorePlayer {
     this.startedAt = Date.now();
     this.isPaused = false;
     this.logPlayerEvent({ userId, username, eventType: "player", action: "resume" });
-    this.onStateChange?.();
+    this.notifyStateChange();
     return true;
   }
 
@@ -142,7 +163,7 @@ export class CorePlayer {
       action: "loop",
       metadata: { loopMode },
     });
-    this.onStateChange?.();
+    this.notifyStateChange();
     return loopMode;
   }
 
@@ -162,7 +183,7 @@ export class CorePlayer {
     this.isLoading = true;
     this.isPaused = false;
     this.elapsed = 0;
-    this.onStateChange?.();
+    this.notifyStateChange();
     let activeStream: Readable | undefined;
     try {
       const provider = this.providers.find((p) => p.id === track.providerId);
@@ -209,7 +230,12 @@ export class CorePlayer {
       this.fromCache = fromCache;
       const onStream = this.onStream;
       if (onStream) {
-        await onStream(trackWithLoudness, stream, () => generation === this.generation);
+        await onStream(
+          trackWithLoudness,
+          stream,
+          () => generation === this.generation,
+          this.restorePaused,
+        );
         if (generation !== this.generation) {
           stream.destroy();
           return;
@@ -226,7 +252,9 @@ export class CorePlayer {
       }
       this.startedAt = Date.now();
       this.isLoading = false;
-      this.onStateChange?.();
+      this.isPaused = this.restorePaused;
+      this.restorePaused = false;
+      this.notifyStateChange();
       log({
         component: "CORE",
         name: "PLAYER",
@@ -296,7 +324,7 @@ export class CorePlayer {
     if (this.isLoading) throw new Error("The player is changing tracks. Please try again.");
     const index = position - 1;
     const currentIndex = this.queue.currentIndex;
-    const [removed] = this.queue.remove(index);
+    const [removed] = this.queue.remove(index, false);
     this.failedTracks.clear();
     this.logPlayerEvent({
       userId,
@@ -316,7 +344,7 @@ export class CorePlayer {
       await this.play();
       return removed;
     }
-    this.onStateChange?.();
+    this.notifyStateChange();
     return removed;
   }
 
@@ -341,7 +369,15 @@ export class CorePlayer {
     this.queue.tracks = [];
     this.queue.loopMode = "off";
     this.failedTracks.clear();
+    this.restorePaused = false;
+    this.onPersist?.();
     this.onStop?.();
+  }
+
+  suspend() {
+    this.generation++;
+    this.isPlaying = false;
+    this.isLoading = false;
   }
 
   setVolume(percent: number, userId: string, username?: string) {
@@ -368,6 +404,7 @@ export class CorePlayer {
       action: "clear",
       metadata: { removedCount: removed },
     });
+    this.notifyStateChange();
     return removed;
   }
 }

@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+  <head><%- include('head', { title: 'Sashimi · Spotify account', live: false }) %></head>
+  <body class="min-vh-100">
+    <main class="container page-container">
+      <section class="card dashboard-card p-4">
+        <h1 class="h3"><%= success ? 'Spotify Linked Successfully' : 'Spotify Account Linking' %></h1>
+        <p><%= message %></p>
+        <a class="btn btn-primary align-self-start" href="/dashboard">Return to dashboard</a>
+      </section>
+    </main>
+  </body>
+</html>

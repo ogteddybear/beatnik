@@ -1,3 +1,4 @@
+import { setSessionChannels } from "@/core/manager";
 import type { CorePlayer } from "@/core/player";
 import type { TextBasedChannel, VoiceBasedChannel } from "discord.js";
 
@@ -17,10 +18,15 @@ export function getOrCreateVoiceSession(
   const { guildId } = voiceChannel;
   let session = voiceSessions.get(guildId);
   if (!session) {
+    setSessionChannels(guildId, voiceChannel.id, textChannel?.id ?? null);
     session = new VoiceSession(voiceChannel, textChannel, corePlayer, actor);
     voiceSessions.set(guildId, session);
   }
   return session;
+}
+
+export function destroyAllVoiceSessions() {
+  for (const guildId of [...voiceSessions.keys()]) deleteVoiceSession(guildId);
 }
 
 export function deleteVoiceSession(guildId: string) {

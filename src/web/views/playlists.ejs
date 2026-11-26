@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+  <head>
+    <%- include('head', { title: 'Sashimi · Playlists', live: false }) %>
+    <script src="/static/playlists.js" defer></script>
+  </head>
+  <body class="min-vh-100">
+    <%- include('navbar', { active: 'playlists' }) %>
+    <main class="container page-container">
+      <h1 class="display-6 fw-bold">Your playlists</h1>
+      <p class="text-secondary">Private to your Discord account. Play them with <code>/load custom name:</code> in a voice channel.</p>
+      <form id="create-playlist" class="d-flex gap-2 mb-4">
+        <label class="visually-hidden" for="playlist-name">Playlist name</label>
+        <input id="playlist-name" name="name" class="form-control" maxlength="100" placeholder="Playlist name" required />
+        <button class="btn btn-primary" type="submit">Create playlist</button>
+      </form>
+      <p id="playlist-status" class="text-secondary" role="status" aria-live="polite">Loading playlists…</p>
+      <div id="playlists" class="row g-4"></div>
+      <a href="/dashboard" class="d-inline-block mt-4">← Dashboard</a>
+    </main>
+  </body>
+</html>

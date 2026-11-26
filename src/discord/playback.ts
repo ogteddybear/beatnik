@@ -56,3 +56,34 @@ export function createDownloadProgressHandler(interaction: ChatInputCommandInter
     );
   };
 }
+
+export async function enqueueTracksAndPlay(
+  interaction: ChatInputCommandInteraction,
+  tracks: ProviderTrack[],
+  options: { shuffle?: boolean; playNext?: boolean } = {},
+) {
+  if (!interaction.guildId) return;
+  const voiceChannel = await requireVoiceChannel(interaction);
+  if (!voiceChannel) return;
+  const { player } = getOrCreateSession(interaction.guildId);
+  getOrCreateVoiceSession(voiceChannel, interaction.channel, player, {
+    userId: interaction.user.id,
+    username: interaction.user.username,
+  });
+  const queued = player.enqueueTracks(
+    tracks,
+    interaction.user.id,
+    options.shuffle,
+    options.playNext,
+    interaction.user.username,
+  );
+  await interaction.editReply({
+    content: getAddedToQueueMessage(
+      queued,
+      player.isPlaying,
+      options.playNext ?? false,
+      options.shuffle ?? false,
+    ),
+  });
+  if (!player.isPlaying) await player.play();
+}

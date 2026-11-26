@@ -1,0 +1,7 @@
+<section class="card dashboard-card p-4 mb-4" aria-labelledby="spotify-heading">
+  <h2 class="h4" id="spotify-heading">Spotify Account</h2>
+  <p id="spotify-account-status" class="text-secondary" role="status" aria-live="polite"><%= account?.linked ? 'Linked as ' + account.displayName : 'Link your account to access your private Spotify playlists.' %></p>
+  <a id="spotify-link" class="btn btn-outline-light align-self-start" href="/auth/spotify" <%= account?.linked ? 'hidden' : '' %>>Link Spotify</a>
+  <button id="spotify-unlink" class="btn btn-outline-danger align-self-start" type="button" <%= account?.linked ? '' : 'hidden' %>>Unlink</button>
+</section>
+<script src="/static/spotify-account.js" defer></script>

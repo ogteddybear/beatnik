@@ -52,7 +52,14 @@ test("live player widget renders safe titles, progress, upcoming tracks, pauses 
   let pendingControl!: (response: Response) => void;
   const controls: RequestInit[] = [];
   let denied = false;
+  let savedQueue: unknown;
+  window.prompt = () => "Saved queue";
   window.fetch = async (_url, options) => {
+    if (String(_url) === "/api/playlists") {
+      savedQueue = JSON.parse(String(options?.body));
+      assert.equal(new Headers(options?.headers).get("X-Sashimi-Request"), "playlists");
+      return Response.json({ playlist: { id: 1 } }, { status: 201 });
+    }
     if (options?.method === "POST") {
       controls.push(options);
       if (denied) return new Response("", { status: 403 });
@@ -99,6 +106,9 @@ test("live player widget renders safe titles, progress, upcoming tracks, pauses 
     );
     assert.equal(controls.length, 2, "Failed controls must not be automatically retried");
     denied = false;
+    root.querySelector<HTMLButtonElement>("[data-save-queue]")?.click();
+    await flush();
+    assert.deepEqual(savedQueue, { name: "Saved queue", guildId: "guild" });
     tick();
     await flush();
     assert.match(root.textContent ?? "", /paused/);

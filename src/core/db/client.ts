@@ -3,7 +3,12 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 
 import { config } from "../config";
-import { ensureGuildEventColumns, runMigrations } from "./migrations";
+import {
+  applicationStateSchema,
+  ensureGuildEventColumns,
+  runMigrations,
+  spotifyUserSchema,
+} from "./migrations";
 
 const url = config.databaseUrl;
 export const archivePath = path.join(config.libraryPath, "library-archive.db");
@@ -98,6 +103,8 @@ async function getDatabaseClient() {
   db.pragma("journal_mode = DELETE");
   db.pragma("foreign_keys = ON");
   db.exec(tableInit);
+  db.exec(applicationStateSchema);
+  db.exec(spotifyUserSchema);
   runMigrations(db);
   return db;
 }

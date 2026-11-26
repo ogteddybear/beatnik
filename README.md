@@ -137,8 +137,12 @@ than retrying forever.
 The regular and owner dashboards show Now Playing widgets for only the
 guilds already visible to that user, including artist, thumbnail, progress,
 loop/paused state, and up to five upcoming tracks. State refreshes every 15 seconds
-while the page is visible. Player queues, loop modes and pause state remain
-in-memory and reset on restart. Seeking is not offered: the current provider
+while the page is visible. Queues, voice/text channel IDs, playback index, loop
+mode and pause state are saved to SQLite on mutations and restored after Discord
+is ready on restart. The current track restarts from its beginning; volume and
+exact playback position are not persisted. `/stop`, queue completion and voice
+departure clear the saved row. Graceful deployment shutdown preserves it.
+Seeking is not offered: the current provider
 contract returns non-seekable streams without a start-offset API.
 Pause/resume, skip and stop buttons send authenticated remote actions. Unlike
 Discord buttons, web controls do not require presence in the voice channel:
@@ -156,7 +160,64 @@ The previous saved-library removal subcommands are preserved under
 subcommand is also available there). `/history` lists the last ten recorded
 playback starts for this guild, including the current track, repeats, and
 archived events. History survives restarts; older events without recorded titles
-show “Unknown track”. Command definitions use version `1.6.0`.
+show “Unknown track”. Command definitions use version `1.8.0`.
+
+### Personal Spotify accounts
+
+Users can link Spotify from the dashboard's **Spotify Account** card or
+`/spotify link`. Set `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET`, and register
+`https://dis.sashimi.zip/auth/spotify/callback` as an exact redirect URI in the
+Spotify developer dashboard. `SPOTIFY_REDIRECT_URI` can override the callback;
+otherwise its origin is derived from `DISCORD_REDIRECT_URI` (production defaults
+to `https://dis.sashimi.zip`).
+
+The authorization requests `playlist-read-private`, `playlist-read-collaborative`,
+and `user-read-private`. Sign into the Sashimi dashboard first, then click the
+Spotify link again if you were redirected through Discord login. Spotify
+development-mode account eligibility and app allowlisting still apply.
+
+All `/spotify` replies are ephemeral:
+
+- `/spotify playlists page:1` lists the user's playlists privately.
+- `/spotify load playlist:...` accepts autocomplete, a playlist ID, or a Spotify
+  playlist URL and queues playable matches in the user's voice channel.
+- `/spotify unlink` removes stored authorization; the dashboard also supports unlink.
+
+`/play` automatically uses the requesting user's authorization for Spotify
+playlists, falling back to public spotdl resolution when unlinked or denied
+access. Private playlist metadata is not reused through the shared metadata cache.
+Playlist discovery is private, but queued tracks appear in the normal shared
+guild queue and playback controls.
+
+Tokens are stored in SQLite and refreshed automatically, with refresh-token
+rotation supported. Protect the database and its backups as credentials.
+Unlinking deletes local tokens and cancels pending linking attempts; it does not
+revoke Spotify-side consent (users can remove the app in Spotify account settings).
+
+### Personal web playlists, lyrics and exports
+
+`/playlists` lets signed-in users create private playlists, add supported HTTPS
+YouTube/SoundCloud/Spotify track links, view tracks and delete playlists. All
+queries are scoped to the signed-in owner, including autocomplete in Discord.
+The dashboard's “Save Current Queue to Playlist” button copies the current track
+and upcoming tracks (not the already-played prefix). Load one with
+`/load custom name:"Chill Vibes"`; existing `/load playlist`, `/load track` and
+`/load all` remain available. Creating playlists does not download audio.
+Names are unique per owner (case-insensitive), with limits of 100 playlists per
+owner and 1000 tracks per playlist. Mutation APIs require the
+`X-Sashimi-Request: playlists` header and JSON for POSTs.
+
+`/lyrics` searches `lyrics-finder` using the current track's artist and title.
+Requests have an eight-second response timeout and a bounded ten-minute cache;
+overlong lyrics are escaped and truncated to fit Discord's embed limit.
+Lyrics lookup depends on an external search service and can be unavailable.
+
+The owner-only `/api/admin/export/events` endpoint downloads all live and archived
+events as CSV. The admin page links to it. Exports quote commas/newlines/quotes,
+neutralize spreadsheet formulas, exclude events inserted after export starts,
+and use bounded pages with network backpressure rather than holding a database
+read lock for the whole download. New tables are installed by migration
+`006_sessions_and_user_playlists`; back up the main and archive SQLite files.
 
 Raw events older than 30 days are moved on startup and every 24 hours to
 `LIBRARY_PATH/library-archive.db`. Each bounded batch copies and deletes events
@@ -192,6 +253,8 @@ Sashimi uses Discord slash commands. You can type `/` in any text channel, and t
 | `/play [query]` | Plays a video or playlist URL, or searches for a text query and plays the first result. | `end`: Adds to end of the queue, instead of next.<br> `shuffle`: Shuffles a playlist. |
 | `/load (playlist \| track) [item]` | Loads a playlist or track from your library. | `end`: Adds to end of the queue, instead of next.<br> `shuffle`: Shuffles a playlist. |
 | `/load all` | Loads all playlists into the queue and shuffles. | |
+| `/load custom name:"Chill Vibes"` | Queues one of your personal web playlists. | `next`, `shuffle` |
+| `/lyrics` | Finds lyrics for the currently playing track. | |
 | `/add [query]` | Adds a YouTube URL to your library (playlist or track) and downloads the tracks locally. |
 | `/update playlist [playlist]` | Updates a playlist in your library (eg. when new tracks are added.) | |
 | `/update all` | Updates all saved playlists in your library. | |
