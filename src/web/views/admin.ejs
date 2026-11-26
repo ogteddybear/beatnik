@@ -11,16 +11,16 @@
           <p class="text-primary text-uppercase fw-semibold eyebrow mb-2">Owner workspace</p>
           <h1 class="display-6 fw-bold mb-0">All bot servers</h1>
         </div>
-        <a class="btn btn-outline-light" href="/dashboard">Back to dashboard</a>
+        <div class="header-actions"><a class="btn btn-outline-light" href="/dashboard">Back to dashboard</a>
         <a class="btn btn-outline-light" href="/api/admin/export/events">Export Event Log (CSV)</a>
-        <a class="btn btn-outline-light" href="/admin/bot">Bot settings</a>
+        <a class="btn btn-outline-light" href="/admin/bot">Bot settings</a></div>
       </header>
       <p class="text-secondary admin-description">Every server listening with Sashimi. Open a server to explore its activity and analytics.</p>
       <%- include('infrastructure', { infrastructure: typeof infrastructure === 'undefined' ? null : infrastructure }) %>
       <%- include('player-widget') %>
       <section class="panel page-section" aria-labelledby="event-search-heading">
         <h2 id="event-search-heading" class="h4">Search all event logs</h2>
-        <form id="admin-search" class="d-flex gap-2">
+        <form id="admin-search" class="d-flex gap-2 responsive-action-form">
           <label class="visually-hidden" for="event-search-query">Username, track name or action</label>
           <input id="event-search-query" class="form-control" type="search" maxlength="200" required placeholder="Username, track name or action…" />
           <button class="btn btn-primary" type="submit">Search</button>

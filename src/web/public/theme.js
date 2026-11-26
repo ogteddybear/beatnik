@@ -8,6 +8,7 @@
       button.textContent = theme === "dark" ? "Light mode" : "Dark mode";
       button.setAttribute("aria-label", `Switch to ${theme === "dark" ? "light" : "dark"} mode`);
     });
+    document.dispatchEvent(new CustomEvent("sashimi:theme", { detail: { theme } }));
   }
   function current() {
     return document.documentElement.dataset.bsTheme === "light" ? "light" : "dark";

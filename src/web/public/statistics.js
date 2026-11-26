@@ -5,22 +5,58 @@
   const refresh = document.getElementById("refresh-statistics");
   let charts = [];
   let busy = false;
+  function palette() {
+    const style = getComputedStyle(document.documentElement);
+    return {
+      text: style.getPropertyValue("--text-secondary").trim() || "#aab7d1",
+      grid: style.getPropertyValue("--border-color").trim() || "#354460",
+    };
+  }
   function chart(id, type, labels, datasets, extra = {}) {
+    const colors = palette();
     return new window.Chart(document.getElementById(id), {
       type,
       data: { labels, datasets },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: { legend: { labels: { color: "#aebbd0" } } },
+        indexAxis: type === "bar" ? "y" : "x",
+        plugins: { legend: { labels: { color: colors.text } } },
         ...(type !== "pie"
           ? {
               scales: {
-                x: { ticks: { color: "#aebbd0" }, grid: { color: "#52607855" } },
+                x: {
+                  beginAtZero: type === "bar",
+                  ticks: {
+                    color: colors.text,
+                    precision: 0,
+                    maxTicksLimit: 6,
+                    maxRotation: 0,
+                    ...(type === "line"
+                      ? {
+                          callback: function (value) {
+                            return this.getLabelForValue(value).slice(5);
+                          },
+                        }
+                      : {}),
+                  },
+                  grid: { color: colors.grid },
+                },
                 y: {
                   beginAtZero: true,
-                  ticks: { precision: 0, color: "#aebbd0" },
-                  grid: { color: "#52607855" },
+                  ticks: {
+                    precision: 0,
+                    color: colors.text,
+                    ...(type === "bar"
+                      ? {
+                          callback: function (value) {
+                            const label = this.getLabelForValue(value);
+                            return label.length > 18 ? label.slice(0, 17) + "…" : label;
+                          },
+                        }
+                      : {}),
+                  },
+                  grid: { color: colors.grid },
                 },
               },
             }
@@ -126,5 +162,18 @@
     }
   }
   refresh.addEventListener("click", () => void load());
+  document.addEventListener("sashimi:theme", () => {
+    const colors = palette();
+    for (const instance of charts) {
+      instance.options.plugins.legend.labels.color = colors.text;
+      for (const scale of Object.values(instance.options.scales || {})) {
+        if (scale.ticks) scale.ticks.color = colors.text;
+        if (scale.grid) scale.grid.color = colors.grid;
+      }
+      instance.stop?.();
+      instance.update("none");
+      instance.render?.();
+    }
+  });
   void load();
 })();

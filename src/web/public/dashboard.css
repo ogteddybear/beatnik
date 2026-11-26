@@ -11,6 +11,7 @@
   --surface-hover: #24344f;
   --border-color: #354460;
   --text-primary: #eef2ff;
+  --on-primary: #ffffff;
   --text-secondary: #aab7d1;
   --success: #9acbb7;
   --success-surface: #1c3335;
@@ -99,7 +100,11 @@ select {
     box-shadow var(--transition-time) var(--transition-ease);
 }
 a {
+  color: var(--accent);
   text-underline-offset: 0.2em;
+}
+a:hover {
+  color: var(--text-primary);
 }
 :is(a, button, input, select):focus-visible {
   outline: 2px solid var(--accent);
@@ -188,6 +193,8 @@ pre,
   margin-block: var(--space-8);
 }
 .panel {
+  min-width: 0;
+  overflow-wrap: anywhere;
   background: var(--surface-section);
   border: var(--border-soft);
   border-radius: var(--radius-card);
@@ -214,6 +221,75 @@ pre,
   gap: var(--space-3);
   min-width: 0;
 }
+.avatar-placeholder {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface-hover);
+  color: var(--accent);
+}
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.header-actions .btn {
+  flex: 0 1 auto;
+}
+.playlist-track-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.playlist-track-title {
+  flex: 1 1 10rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.playlist-track-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+.playlist-handle,
+.queue-drag-handle {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 44px;
+  min-height: 44px;
+  width: 44px;
+  border: var(--border-soft);
+  border-radius: var(--radius-control);
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  font-size: 1.25rem;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.playlist-handle:active,
+.queue-drag-handle:active {
+  cursor: grabbing;
+}
+.sortable-ghost {
+  opacity: 0.5;
+}
+.responsive-action-form > .form-control {
+  flex: 1 1 12rem;
+  width: auto;
+}
+.responsive-action-form > .btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.page-container > h1 {
+  overflow-wrap: anywhere;
+}
 .nav-username {
   max-width: 12rem;
   overflow: hidden;
@@ -229,16 +305,16 @@ pre,
   white-space: normal;
 }
 .btn-primary {
-  --bs-btn-color: var(--text-primary);
+  --bs-btn-color: var(--on-primary);
   --bs-btn-bg: var(--brand-primary);
   --bs-btn-border-color: var(--brand-primary);
-  --bs-btn-hover-color: var(--text-primary);
+  --bs-btn-hover-color: var(--on-primary);
   --bs-btn-hover-bg: var(--brand-hover);
   --bs-btn-hover-border-color: var(--brand-hover);
-  --bs-btn-active-color: var(--text-primary);
+  --bs-btn-active-color: var(--on-primary);
   --bs-btn-active-bg: var(--brand-active);
   --bs-btn-active-border-color: var(--brand-active);
-  --bs-btn-disabled-color: var(--text-primary);
+  --bs-btn-disabled-color: var(--on-primary);
   --bs-btn-disabled-bg: var(--brand-primary);
   --bs-btn-disabled-border-color: var(--brand-primary);
 }
@@ -300,7 +376,7 @@ pre,
   color: var(--text-secondary);
   opacity: 0.65;
 }
-.form-control:invalid:not(:placeholder-shown) {
+.form-control:user-invalid {
   border-color: var(--error);
 }
 .dashboard-card {
@@ -422,6 +498,7 @@ a.server-card-title:hover {
   color: var(--error);
   background: var(--error-surface);
 }
+.table,
 .table-dark {
   --bs-table-color: var(--text-primary);
   --bs-table-bg: var(--surface-section);
@@ -495,6 +572,24 @@ a.server-card-title:hover {
   background: var(--error-surface);
 }
 @media (max-width: 575.98px) {
+  .playlist-track-controls {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+  .responsive-action-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .responsive-action-form > .form-control {
+    flex-basis: auto;
+    width: 100%;
+  }
+  .header-actions {
+    width: 100%;
+  }
+  .nav-actions .btn {
+    min-height: 40px;
+  }
   .page-container {
     padding-block: var(--space-8);
   }
@@ -535,6 +630,9 @@ a.server-card-title:hover {
 .statistics-chart-line {
   height: 260px;
 }
+.statistics-chart-tracks {
+  height: 400px;
+}
 [data-bs-theme="light"] {
   color-scheme: light;
   --accent: #254d91;
@@ -551,4 +649,6 @@ a.server-card-title:hover {
   --warning-surface: #fff1ce;
   --error: #9b2537;
   --error-surface: #fbe6ea;
+  --bs-emphasis-color: var(--text-primary);
+  --bs-heading-color: var(--text-primary);
 }

@@ -51,16 +51,18 @@
     list.replaceChildren();
     for (const [index, track] of (playlist?.tracks || []).entries()) {
       const row = document.createElement("li");
-      row.className = "list-group-item d-flex gap-2 flex-wrap align-items-center";
-      const handle = document.createElement("span");
+      row.className = "list-group-item playlist-track-row";
+      const handle = document.createElement("button");
+      handle.type = "button";
+      handle.setAttribute("aria-label", `Drag ${track.title} to reorder; or use the arrow buttons`);
       handle.className = "playlist-handle";
       handle.textContent = "⠿";
       const title = document.createElement("span");
-      title.className = "flex-grow-1 text-break";
+      title.className = "playlist-track-title";
       title.textContent = `${index + 1}. ${track.title}`;
-      row.append(
-        handle,
-        title,
+      const controls = document.createElement("div");
+      controls.className = "playlist-track-controls";
+      controls.append(
         button("↑", () => move(index, index - 1)),
         button("↓", () => move(index, index + 1)),
         button("Remove", () =>
@@ -70,6 +72,7 @@
           }),
         ),
       );
+      row.append(handle, title, controls);
       list.append(row);
     }
   }
