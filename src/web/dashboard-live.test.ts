@@ -4,6 +4,11 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 
+import { proxyImageUrl } from "../utils/image-proxy";
+
+const browserProxy = (url: string) =>
+  "https://sashimi.example" + new URL(proxyImageUrl(url)).pathname;
+
 for (const mode of ["admin", "regular"]) {
   test(`${mode} refresh preserves icons and card identity`, async () => {
     const guild = {
@@ -30,13 +35,14 @@ for (const mode of ["admin", "regular"]) {
         isAdmin: mode === "admin",
         inviteUrl: "/invite",
         guilds,
+        proxyImageUrl,
       },
     );
     const dom = new JSDOM(html, { runScripts: "outside-only", url: "https://sashimi.example" });
     const initialCard = dom.window.document.querySelector('[data-guild-id="123"]');
     const initialIcon = initialCard?.querySelector("img");
     assert(initialIcon, "initial HTML includes guild icon");
-    assert.equal(initialIcon.src, guild.iconUrl);
+    assert.equal(initialIcon.src, proxyImageUrl(guild.iconUrl));
     let tick: () => void = () => {
       throw new Error("Polling interval not registered");
     };
@@ -55,7 +61,7 @@ for (const mode of ["admin", "regular"]) {
       assert(card);
       const icon = card.querySelector("img");
       assert(icon, "guild icon must render after AJAX refresh");
-      assert.equal(icon.src, guild.iconUrl);
+      assert.equal(icon.src, browserProxy(guild.iconUrl));
       assert.equal(card, initialCard);
       assert.equal(card.querySelector<HTMLElement>(".progress-bar")?.style.width, "60%");
       assert.equal(icon, initialIcon);
@@ -86,7 +92,7 @@ for (const mode of ["admin", "regular"]) {
       guilds = [{ ...guild, iconUrl: "https://cdn.discordapp.com/icons/123/new.png" }];
       tick();
       await flush();
-      assert.equal(icon.src, guilds[0].iconUrl);
+      assert.equal(icon.src, browserProxy(guilds[0].iconUrl ?? ""));
       icon.dispatchEvent(new dom.window.Event("error"));
       assert.equal(icon.hidden, true);
       assert.equal(card.querySelector<HTMLElement>(".guild-placeholder")?.hidden, false);
@@ -95,7 +101,7 @@ for (const mode of ["admin", "regular"]) {
       await flush();
       assert.equal(
         document.querySelector<HTMLImageElement>('[data-guild-id="789"] img')?.src,
-        guild.iconUrl,
+        browserProxy(guild.iconUrl),
       );
     } finally {
       dom.window.close();

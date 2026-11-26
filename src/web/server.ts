@@ -29,10 +29,12 @@ import path from "node:path";
 import { setImmediate } from "node:timers/promises";
 import passport from "passport";
 
+import { proxyImageUrl } from "../utils/image-proxy";
 import { EVENTS_CSV_HEADER, eventCsvRow } from "./events-csv";
 import { mountEventsStream } from "./events-stream";
 import { mountFinalPanel } from "./final-panel";
 import { mountGuildManagement } from "./guild-management";
+import { mountImageProxy } from "./image-proxy";
 import {
   INVITE_CONFIRMATION_TTL,
   type InviteResult,
@@ -106,10 +108,12 @@ function isDashboardUser(user: Express.User | undefined): user is DashboardUser 
 
 function avatarUrlFor(user: DashboardUser): string {
   if (user.avatar) {
-    return `https://cdn.discordapp.com/avatars/${encodeURIComponent(user.id)}/${encodeURIComponent(user.avatar)}.png`;
+    return proxyImageUrl(
+      `https://cdn.discordapp.com/avatars/${encodeURIComponent(user.id)}/${encodeURIComponent(user.avatar)}.png`,
+    );
   }
   const defaultAvatarIndex = user.id ? (BigInt(user.id) >> 22n) % 6n : 0n;
-  return `https://cdn.discordapp.com/embed/avatars/${defaultAvatarIndex}.png`;
+  return proxyImageUrl(`https://cdn.discordapp.com/embed/avatars/${defaultAvatarIndex}.png`);
 }
 
 export const guildStorageBytes = calculateGuildStorage;
@@ -177,7 +181,9 @@ async function guildSummaries(guilds: ReturnType<typeof authorizedGuilds>) {
         id: guild.id,
         name: guild.name,
         iconUrl: guild.icon
-          ? `https://cdn.discordapp.com/icons/${encodeURIComponent(guild.id)}/${encodeURIComponent(guild.icon)}.png`
+          ? proxyImageUrl(
+              `https://cdn.discordapp.com/icons/${encodeURIComponent(guild.id)}/${encodeURIComponent(guild.icon)}.png`,
+            )
           : null,
         requests,
         plays,
@@ -275,6 +281,8 @@ export function createWebServer(
   auth.deserializeUser((user, done) => done(null, user as DashboardUser));
 
   const app = express();
+  app.locals.proxyImageUrl = proxyImageUrl;
+  mountImageProxy(app);
   if (production) app.set("trust proxy", 1);
   app.disable("x-powered-by");
   app.set("view engine", "ejs");

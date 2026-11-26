@@ -2,7 +2,7 @@
   <article class="card dashboard-card server-card h-100 p-4">
     <div class="server-card-header">
       <div class="server-card-identity">
-        <img class="guild-icon" <% if (guild.iconUrl) { %>src="<%= guild.iconUrl %>"<% } %> alt="" width="56" height="56" <%= guild.iconUrl ? '' : 'hidden' %> />
+        <img class="guild-icon" <% if (guild.iconUrl) { %>src="<%= typeof proxyImageUrl === 'function' ? proxyImageUrl(guild.iconUrl) : guild.iconUrl %>"<% } %> alt="" width="56" height="56" <%= guild.iconUrl ? '' : 'hidden' %> />
         <div class="guild-icon guild-placeholder" aria-hidden="true" <%= guild.iconUrl ? 'hidden' : '' %>><%= guild.name.charAt(0).toUpperCase() || '♫' %></div>
       </div>
       <% if (isAdmin) { %>

@@ -2,7 +2,7 @@
   <div class="container">
     <a href="/dashboard" class="navbar-brand fw-bold"><span class="text-primary" aria-hidden="true">♫</span> Sashimi</a>
     <div class="nav-actions">
-      <% if (avatarUrl) { %><img class="avatar" src="<%= avatarUrl %>" alt="" width="36" height="36" />
+      <% if (avatarUrl) { %><img class="avatar" src="<%= typeof proxyImageUrl === 'function' ? proxyImageUrl(avatarUrl) : avatarUrl %>" alt="" width="36" height="36" />
       <% } else { %><span class="avatar-placeholder" aria-hidden="true">♫</span><% } %>
       <span class="nav-username d-none d-sm-inline"><%= username %></span>
       <% if (isAdmin) { %>

@@ -1,4 +1,11 @@
 (() => {
+  function proxyImageUrl(url) {
+    if (!url || /^(?:https:\/\/dis\.sashimi\.zip)?\/api\/image-proxy\//.test(url)) return url;
+    const bytes = encodeURIComponent(url).replace(/%([0-9A-F]{2})/g, (_match, hex) =>
+      String.fromCharCode(parseInt(hex, 16)),
+    );
+    return `/api/image-proxy/${btoa(bytes).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")}`;
+  }
   const mode = document.body.dataset.dashboard;
   if (!mode) return;
   const status = document.getElementById("live-status");
@@ -191,8 +198,8 @@
     }
     fallback.textContent = guild.name.charAt(0).toUpperCase() || "♫";
     if (guild.iconUrl) {
-      if (image.getAttribute("src") !== guild.iconUrl) {
-        image.src = guild.iconUrl;
+      if (image.getAttribute("src") !== proxyImageUrl(guild.iconUrl)) {
+        image.src = proxyImageUrl(guild.iconUrl);
         image.hidden = false;
         fallback.hidden = true;
       }
@@ -274,7 +281,7 @@
       header.className = "d-flex align-items-center gap-3";
       if (/^https?:\/\//i.test(state.track.thumbnail || "")) {
         const thumbnail = document.createElement("img");
-        thumbnail.src = state.track.thumbnail;
+        thumbnail.src = proxyImageUrl(state.track.thumbnail);
         thumbnail.alt = "";
         thumbnail.width = 64;
         thumbnail.height = 64;

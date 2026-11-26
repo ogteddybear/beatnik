@@ -10,6 +10,8 @@ import {
   escapeMarkdown,
 } from "discord.js";
 
+import { proxyImageUrl } from "../utils/image-proxy";
+
 export function playbackTime(seconds: number): string {
   const value = Math.max(0, Math.floor(seconds));
   return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, "0")}`;
@@ -31,7 +33,8 @@ export function nowPlayingPayload(state: PlayerState) {
     .setDescription(
       `${escapeMarkdown(state.track.artist.slice(0, 256) || "Unknown artist")}\n\n\`[${"█".repeat(filled)}${"░".repeat(20 - filled)}]\`\n${playbackTime(state.progressSeconds)} / ${state.track.durationSeconds ? playbackTime(state.track.durationSeconds) : "Live"} · Loop: ${state.loopMode}`,
     );
-  if (/^https?:\/\//i.test(state.track.thumbnail)) embed.setThumbnail(state.track.thumbnail);
+  if (/^https?:\/\//i.test(state.track.thumbnail))
+    embed.setThumbnail(proxyImageUrl(state.track.thumbnail));
   const disabled = state.status === "loading";
   const components = [
     new ActionRowBuilder<ButtonBuilder>().addComponents(

@@ -164,6 +164,22 @@ show “Unknown track”. Command definitions use version `1.9.0`.
 
 ### Server settings, radio, and full queue management
 
+External thumbnail, guild-icon and avatar images are routed through
+`GET /api/image-proxy/:base64url`. The public route accepts only exact approved
+CDN hostnames over HTTPS, rejects credentials/custom ports/traversal/control
+characters, checks every DNS answer for public unicast addresses, and pins the
+validated address in native HTTPS lookup while retaining normal TLS hostname
+verification. Redirects are not followed.
+
+Only JPEG/PNG/WebP/GIF headers and matching raster signatures are accepted.
+SVG, HTML, compressed HTTP bodies and oversized images are rejected. Downloads
+are limited to 5 MiB, four distinct in-flight images, five-second socket idle and
+ten-second total deadlines. Same-image requests share a download; the process-local
+LRU cache holds up to 250 MiB (2000 entries) for 24 hours. Buffer assembly uses
+additional bounded transient memory beyond the cache. Responses include `nosniff`,
+a restrictive CSP, inline disposition, and one-hour public cache headers.
+This is a byte proxy: it does not decode, resize or re-encode raster images.
+
 `/recap` is private to the signed-in user and summarizes their attributed playback
 starts over the last 30 days. Artist/channel and duration snapshots are recorded
 on new playback events. Historical missing metadata is not invented. “Estimated

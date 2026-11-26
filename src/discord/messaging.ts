@@ -7,6 +7,8 @@ import type {
 import { MessageFlags, bold, italic, userMention } from "discord.js";
 import { EmbedBuilder } from "discord.js";
 
+import { proxyImageUrl } from "../utils/image-proxy";
+
 export async function requireVoiceChannel(interaction: CommandInteraction) {
   const requestingUserId = interaction.user.id;
   const requestingMember = interaction.guild?.members.cache.get(requestingUserId);
@@ -45,7 +47,7 @@ export function getNowPlayingEmbed(
       name: `Now playing on Sashimi`,
     })
     .setTitle(track.title)
-    .setThumbnail(track.thumbnailUrl ?? "")
+    .setThumbnail(track.thumbnailUrl ? proxyImageUrl(track.thumbnailUrl) : null)
     .setDescription(
       `:cinema: ${italic(track.channelName ?? "unknown")} :hourglass: ${getDurationString(
         track.length,

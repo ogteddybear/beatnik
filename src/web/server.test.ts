@@ -8,6 +8,8 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
+import { proxyImageUrl } from "../utils/image-proxy";
+
 test("Discord OAuth uses the existing bot client ID when no dashboard override is set", async () => {
   const libraryPath = await mkdtemp(path.join(os.tmpdir(), "sashimi-web-test-"));
   process.env.TOKEN = "test-token";
@@ -378,7 +380,7 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
       assert.equal(JSON.stringify(memberBody).includes("Private song"), false);
       assert.equal(
         memberBody.guilds[0].iconUrl,
-        "https://cdn.discordapp.com/icons/managed/guild-icon-hash.png",
+        proxyImageUrl("https://cdn.discordapp.com/icons/managed/guild-icon-hash.png"),
       );
       assert.deepEqual(
         memberBody.guilds.map((guild: { id: string }) => guild.id),

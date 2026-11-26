@@ -71,6 +71,9 @@ test("recap is user-scoped and honest about missing metadata; bot controls persi
         method: body ? "POST" : "GET",
         redirect: "manual",
         headers: {
+          // Imports can stall this test past the server's idle keep-alive timeout.
+          // Do not reuse a stale local HTTP socket between independent assertions.
+          Connection: "close",
           "X-User": user,
           "X-Sashimi-Request": header,
           "Content-Type": "application/json",
