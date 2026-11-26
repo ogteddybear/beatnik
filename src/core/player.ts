@@ -3,8 +3,12 @@ import { SpotifyPlaylistUnavailableError } from "@/providers/spotify/errors";
 import { log } from "@/shared";
 import type { Readable } from "node:stream";
 
+import { findAutoplayTrack } from "./autoplay";
+import { isProviderEnabled } from "./db/bot-settings";
 import { type EventOptions, logEvent } from "./db/guild-events";
+import { getGuildPlayerSettings, updateGuildPlayerSettings } from "./db/guild-settings";
 import { guildStats } from "./db/guild-stats";
+import { publishGuildUpdate } from "./live-updates";
 import type { LoopMode, Queue, QueuedTrack } from "./queue";
 import { shuffleArray } from "./queue";
 import {
@@ -28,7 +32,9 @@ export class CorePlayer {
     public readonly guildId: string,
     public readonly queue: Queue,
     private providers: Provider[],
-  ) {}
+  ) {
+    this.volume = getGuildPlayerSettings(guildId).volume;
+  }
 
   isPlaying = false;
   isPaused = false;
@@ -47,6 +53,7 @@ export class CorePlayer {
   restorePaused = false;
 
   private notifyStateChange() {
+    publishGuildUpdate(this.guildId);
     this.onPersist?.();
     this.onStateChange?.();
   }
@@ -188,6 +195,8 @@ export class CorePlayer {
     try {
       const provider = this.providers.find((p) => p.id === track.providerId);
       if (!provider) throw new Error(`No provider found for ${track.providerId}`);
+      if (!isProviderEnabled(provider.id))
+        throw new Error("This provider is disabled by the bot owner.");
 
       const loudness = await resolveTrackLoudness(track, provider);
       if (generation !== this.generation) return;
@@ -247,7 +256,11 @@ export class CorePlayer {
           action: "play",
           trackId: track.id,
           trackName: track.title,
-          metadata: { providerId: track.providerId },
+          metadata: {
+            providerId: track.providerId,
+            artist: track.channelName,
+            durationSeconds: track.length,
+          },
         });
       }
       this.startedAt = Date.now();
@@ -282,7 +295,46 @@ export class CorePlayer {
   }
 
   async next(naturalFinish = false, attempted = new Set<number>()) {
+    await this.advance(naturalFinish, attempted);
+  }
+
+  async advance(naturalFinish = false, attempted = new Set<number>()) {
+    const last = this.queue.nowPlaying;
     this.queue.advance(naturalFinish);
+    // Only successful natural completion starts radio; failures/removals/stops
+    // never recursively generate more tracks.
+    if (
+      !this.queue.nowPlaying &&
+      last &&
+      naturalFinish &&
+      getGuildPlayerSettings(this.guildId).autoplay_enabled
+    ) {
+      const generation = ++this.generation;
+      this.isLoading = true;
+      const candidate = await findAutoplayTrack(last, this.providers, this.queue.tracks.slice(-50));
+      if (generation !== this.generation) return;
+      this.isLoading = false;
+      if (
+        !this.queue.nowPlaying &&
+        candidate &&
+        getGuildPlayerSettings(this.guildId).autoplay_enabled &&
+        !this.queue.tracks
+          .slice(-50)
+          .some((track) => track.providerId === candidate.providerId && track.id === candidate.id)
+      ) {
+        this.queue.insertMany(
+          [{ ...candidate, addedBy: last.addedBy, addedByUsername: last.addedByUsername }],
+          this.queue.tracks.length,
+        );
+        this.logPlayerEvent({
+          eventType: "player",
+          action: "autoplay",
+          trackId: candidate.id,
+          trackName: candidate.title,
+          metadata: { providerId: candidate.providerId, seedTrackId: last.id },
+        });
+      }
+    }
     await this.play(attempted);
   }
 
@@ -372,6 +424,7 @@ export class CorePlayer {
     this.restorePaused = false;
     this.onPersist?.();
     this.onStop?.();
+    publishGuildUpdate(this.guildId);
   }
 
   suspend() {
@@ -381,8 +434,9 @@ export class CorePlayer {
   }
 
   setVolume(percent: number, userId: string, username?: string) {
-    if (!Number.isFinite(percent) || percent < 0 || percent > 200)
+    if (!Number.isInteger(percent) || percent < 0 || percent > 200)
       throw new Error("Volume must be between 0 and 200.");
+    updateGuildPlayerSettings(this.guildId, { volume: percent });
     const previous = this.volume;
     this.volume = percent;
     this.onVolume?.(percent);
@@ -393,6 +447,35 @@ export class CorePlayer {
       action: "set",
       metadata: { previous, percent },
     });
+    this.notifyStateChange();
+  }
+
+  reorder(from: number, to: number, userId: string, username?: string) {
+    if (
+      !Number.isInteger(from) ||
+      !Number.isInteger(to) ||
+      from < 1 ||
+      to < 1 ||
+      from > this.queue.tracks.length ||
+      to > this.queue.tracks.length
+    )
+      throw new Error("Invalid queue position.");
+    if (this.isLoading) throw new Error("The player is changing tracks. Please try again.");
+    const current = this.queue.nowPlaying;
+    const [track] = this.queue.tracks.splice(from - 1, 1);
+    this.queue.tracks.splice(to - 1, 0, track);
+    if (current) this.queue.currentIndex = this.queue.tracks.indexOf(current);
+    this.failedTracks.clear();
+    this.logPlayerEvent({
+      userId,
+      username,
+      eventType: "player",
+      action: "reorder",
+      trackId: track.id,
+      trackName: track.title,
+      metadata: { from, to },
+    });
+    this.notifyStateChange();
   }
 
   clear(userId: string, username?: string) {

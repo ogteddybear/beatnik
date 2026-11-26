@@ -139,8 +139,8 @@ guilds already visible to that user, including artist, thumbnail, progress,
 loop/paused state, and up to five upcoming tracks. State refreshes every 15 seconds
 while the page is visible. Queues, voice/text channel IDs, playback index, loop
 mode and pause state are saved to SQLite on mutations and restored after Discord
-is ready on restart. The current track restarts from its beginning; volume and
-exact playback position are not persisted. `/stop`, queue completion and voice
+is ready on restart. The current track restarts from its beginning; exact playback
+position is not persisted. Volume is stored separately in server settings. `/stop`, queue completion and voice
 departure clear the saved row. Graceful deployment shutdown preserves it.
 Seeking is not offered: the current provider
 contract returns non-seekable streams without a start-offset API.
@@ -160,9 +160,116 @@ The previous saved-library removal subcommands are preserved under
 subcommand is also available there). `/history` lists the last ten recorded
 playback starts for this guild, including the current track, repeats, and
 archived events. History survives restarts; older events without recorded titles
-show “Unknown track”. Command definitions use version `1.8.0`.
+show “Unknown track”. Command definitions use version `1.9.0`.
+
+### Server settings, radio, and full queue management
+
+`/recap` is private to the signed-in user and summarizes their attributed playback
+starts over the last 30 days. Artist/channel and duration snapshots are recorded
+on new playback events. Historical missing metadata is not invented. “Estimated
+total track playtime” sums known track durations, including skipped tracks; it is
+not measured listening time or a record of everyone present in voice.
+
+`/admin/bot` and `POST /api/admin/bot` are restricted to owner
+`258189484053495809`. Status, activity text and provider switches persist via
+migration `011_bot_settings`. POST requires JSON and `X-Sashimi-Request: bot`.
+Disabling a provider blocks new resolution, playback and downloads without
+interrupting current audio. Spotify playback depends on YouTube. Empty activity
+text restores the automatic beat-time activity.
+
+Unauthenticated `/stats` exposes only total servers, recorded play starts and
+process uptime. Theme preferences are stored in `localStorage`. `/manifest.json`
+and `/sw.js` provide a minimal installable-app shell where supported; the worker
+only caches allowlisted public assets and a generic offline page. Private pages,
+API data and OAuth responses are never stored for offline access.
+
+`/servers` lists only servers the signed-in user manages (the bot owner sees
+all bot servers), with all-time recorded play totals and top requested tracks.
+Top-track rankings combine live and archived requests by recorded title.
+The owner workspace includes a literal, case-insensitive event search across
+username, track title and action: `GET /api/admin/search?q=...&before=...`.
+Search is owner-only, returns at most 50 events per page with an exclusive
+event-ID cursor, and does not return raw metadata. Queries are limited to 200
+characters; SQL wildcard characters are treated literally.
+
+Dashboard and full-queue views use authenticated `/api/events/stream` SSE
+notifications for playback, queue, and event changes. Notifications contain no
+track/user data; clients reload through the existing authorized APIs.
+The stream rechecks the session and manageable guilds before notifications and
+every 15 seconds (also resynchronizing progress/metrics). Bursts are coalesced;
+slow clients are disconnected instead of buffering indefinitely. Connections
+are limited to ten per user per process and cleaned up on disconnect.
+Polling remains a fallback for missing EventSource support or stream failures,
+and stops after SSE reconnects. This event bus is process-local; multiple app
+instances would require a shared pub/sub transport for immediate cross-instance
+updates (periodic resynchronization still reads the local instance).
+
+Server managers can open `/onboard/:guildId` (also linked from server cards) for
+a four-step setup wizard: volume, DJ role, default Now Playing text channel,
+and autoplay. `POST /api/onboard/:guildId` requires JSON and
+`X-Sashimi-Request: onboard`, rechecks server-management access, and verifies roles
+and channel permissions before saving. Migration `010_guild_onboarding` adds
+`default_text_channel_id`. Volume applies immediately; the default text channel
+applies on new voice sessions, falling back to the command channel if unavailable.
+The bot sends the setup link in a new server's system channel when permitted.
+Onboarding does not change existing storage quotas.
+
+Open **Queue & settings** on a dashboard server card. Only users with Manage Server
+(including Discord administrators) and the bot owner can access this page or its APIs.
+The form persists default volume (0–200%, also applied immediately to live playback),
+autoplay, and an optional DJ role from that server. `/volume` also saves the volume;
+new and restored players load it from SQLite. Storage quotas are preserved separately.
+
+`/autoplay [enabled:true|false]` toggles radio mode and requires Manage Server, the
+configured DJ role, or bot-owner access. The DJ role does not grant web access or
+change permissions for other existing commands. After a successful natural queue
+completion, radio searches YouTube metadata using the last track's title/artist,
+excluding up to 50 recent tracks. It adds one fresh result and records an `autoplay`
+event. Search timeout, no fresh results, or an unplayable result ends the queue.
+Failed playback, manual skipping/removal, and stopping do not start radio.
+Stopping or leaving voice cancels pending radio work.
+
+The full queue refreshes every 15 seconds while visible. Drag handles use pinned
+SortableJS from a CDN; arrow buttons work without it. Remove and reorder use one-based
+positions. Reordering preserves the identity of the current track without restarting
+it; moving already-played tracks beyond the current track makes them upcoming again.
+The UI sends a queue revision to reject edits made against a stale snapshot.
+
+Management APIs:
+
+- `GET/POST /api/dashboard/guilds/:guildId/settings`
+- `GET /api/dashboard/guilds/:guildId/queue`
+- `DELETE /api/dashboard/guilds/:guildId/queue/:position`
+- `POST /api/dashboard/guilds/:guildId/queue/reorder` with `{ from, to }`
+
+Mutations require `X-Sashimi-Request: guild`; POSTs require JSON. Queue mutations
+accept `X-Queue-Revision` (or `revision` in the POST body) for optimistic concurrency.
+
+`/diagnostics` is restricted to bot owner `258189484053495809` and replies ephemerally.
+It shows process uptime/RSS, host CPU load averages (not process CPU utilization),
+database file sizes and live/archive event counts, SoundCloud Client ID presence
+(never its value), configured YouTube SABR/fallback status, and a bounded Spotify
+API connectivity check. Configured/present provider status is not a playback-health
+probe. CPU load averages are unavailable on Windows.
 
 ### Personal Spotify accounts
+
+The web playlist list links to `/playlists/:id`, a private editor with rename,
+YouTube search/add, entry removal, drag ordering (SortableJS CDN), and arrow-button
+ordering. Search returns the existing YouTube provider's best metadata match;
+adding a result resolves its URL server-side. Spotify import appends playable
+matches from a playlist URL/ID using the current user's linked account.
+
+Editor APIs use the existing authenticated owner scope and
+`X-Sashimi-Request: playlists` mutation protection:
+`PUT /api/playlists/:id`, `DELETE /api/playlists/:id/tracks/:trackId`,
+`POST /api/playlists/:id/reorder` with `{ trackIds: [...] }`, and
+`POST /api/playlists/:id/import/spotify` with `{ playlist: "URL or ID" }`.
+Here `trackId` and `trackIds` are stable **playlist-entry IDs**, not provider IDs,
+so duplicate songs can be edited independently. Reordering requires every current
+entry exactly once. Playlist responses expose these as `playlistTrackId`.
+Migration `009_playlist_order` preserves existing entry IDs and order.
+`GET /api/search/youtube?q=...` requires dashboard login.
 
 Users can link Spotify from the dashboard's **Spotify Account** card or
 `/spotify link`. Set `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET`, and register

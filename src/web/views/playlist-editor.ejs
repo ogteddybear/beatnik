@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <%- include('head', { title: 'Playlist editor · Sashimi', live: false }) %>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js" defer></script>
+  <script src="/static/playlist-editor.js" defer></script>
+</head>
+<body data-playlist-id="<%= playlist.id %>">
+  <%- include('navbar', { active: 'playlists' }) %>
+  <main class="container page-container">
+    <a href="/playlists">← Playlists</a><h1 class="h2 mt-3">Playlist editor</h1>
+    <p id="editor-status" role="status" aria-live="polite">Loading playlist…</p>
+    <button id="editor-refresh" type="button" class="btn btn-outline-light mb-3">Refresh playlist</button>
+    <form id="rename-playlist" class="panel page-section"><label for="playlist-name" class="form-label">Name</label>
+      <input id="playlist-name" class="form-control mb-2" maxlength="100" required value="<%= playlist.name %>" />
+      <button class="btn btn-primary">Rename</button></form>
+    <form id="search-tracks" class="panel page-section"><label for="search-query" class="form-label">Search YouTube</label>
+      <input id="search-query" class="form-control mb-2" maxlength="200" required /><button class="btn btn-primary">Search</button>
+      <div id="search-results" class="mt-3"></div></form>
+    <form id="spotify-import" class="panel page-section"><label for="spotify-playlist" class="form-label">Import linked Spotify playlist (URL or ID)</label>
+      <input id="spotify-playlist" class="form-control mb-2" required maxlength="300" />
+      <p class="small text-secondary">Appends playable matches, up to 1000 tracks total. <a href="/auth/spotify">Link Spotify</a></p>
+      <button class="btn btn-primary">Import Spotify playlist</button></form>
+    <section class="panel page-section"><h2 class="h4">Tracks</h2><p>Drag handles or use ↑/↓ to reorder. Duplicate songs are separate entries.</p><ol id="editor-tracks" class="list-group"></ol></section>
+  </main>
+</body></html>

@@ -2,6 +2,7 @@ import { setSessionChannels } from "@/core/manager";
 import type { CorePlayer } from "@/core/player";
 import type { TextBasedChannel, VoiceBasedChannel } from "discord.js";
 
+import { configuredTextChannel } from "./onboarding";
 import { VoiceSession } from "./voice";
 
 const voiceSessions = new Map<string, VoiceSession>();
@@ -18,6 +19,7 @@ export function getOrCreateVoiceSession(
   const { guildId } = voiceChannel;
   let session = voiceSessions.get(guildId);
   if (!session) {
+    textChannel = configuredTextChannel(voiceChannel.guild) ?? textChannel;
     setSessionChannels(guildId, voiceChannel.id, textChannel?.id ?? null);
     session = new VoiceSession(voiceChannel, textChannel, corePlayer, actor);
     voiceSessions.set(guildId, session);

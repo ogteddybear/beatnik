@@ -334,6 +334,42 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
       }
       const request = (uri: string, cookie: string) =>
         originalFetch(`${origin}${uri}`, { headers: { Cookie: cookie }, redirect: "manual" });
+      assert.equal((await originalFetch(`${origin}/api/admin/search?q=play`)).status, 401);
+      assert.equal((await request("/api/admin/search?q=play", memberCookie)).status, 403);
+      assert.equal((await request("/api/admin/search?q=", ownerCookie)).status, 400);
+      assert.equal(
+        (await request("/api/admin/search?q=play&before=nope", ownerCookie)).status,
+        400,
+      );
+      assert.equal((await request("/api/admin/search?q=play", ownerCookie)).status, 200);
+      const serversResponse = await request("/servers", memberCookie);
+      assert.equal(serversResponse.status, 200);
+      const serversHtml = await serversResponse.text();
+      assert.match(serversHtml, /\/dashboard\/guilds\/managed/);
+      assert.doesNotMatch(serversHtml, /\/dashboard\/guilds\/member"/);
+      assert.match(
+        await (await request("/servers", ownerCookie)).text(),
+        /\/dashboard\/guilds\/member/,
+      );
+      assert.equal((await originalFetch(`${origin}/api/dashboard/statistics`)).status, 401);
+      assert.equal(
+        (await request("/api/admin/guilds/managed/statistics", memberCookie)).status,
+        403,
+      );
+      assert.equal(
+        (await request("/api/admin/guilds/missing/statistics", ownerCookie)).status,
+        404,
+      );
+      const chartResponse = await request("/api/dashboard/statistics", memberCookie);
+      assert.equal(chartResponse.status, 200);
+      assert.match(chartResponse.headers.get("cache-control") ?? "", /no-store/);
+      const chartBody = await chartResponse.json();
+      assert.equal(chartBody.days.length, 30);
+      assert.equal(chartBody.timezone, "UTC");
+      assert.equal(
+        (await request("/api/admin/guilds/managed/statistics", ownerCookie)).status,
+        200,
+      );
       const memberStats = await request("/api/dashboard/guilds", memberCookie);
       const memberBody = await memberStats.json();
       assert.equal(memberBody.guilds[0].player.track.title, "Managed song");

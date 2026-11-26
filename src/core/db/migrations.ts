@@ -148,6 +148,55 @@ const migrations: Migration[] = [
       db.exec(spotifyUserSchema);
     },
   },
+  {
+    name: "008_guild_player_settings",
+    up: (db) => {
+      const columns = new Set(
+        db
+          .prepare<[], ColumnInfo>("PRAGMA table_info(GuildSettings)")
+          .all()
+          .map((c) => c.name),
+      );
+      for (const [name, definition] of [
+        ["volume", "INTEGER DEFAULT 100"],
+        ["autoplay_enabled", "INTEGER DEFAULT 0"],
+        ["dj_role_id", "TEXT"],
+      ]) {
+        if (!columns.has(name))
+          db.exec(`ALTER TABLE GuildSettings ADD COLUMN ${name} ${definition}`);
+      }
+    },
+  },
+  {
+    name: "009_playlist_order",
+    up: (db) => {
+      const columns = db.prepare<[], ColumnInfo>("PRAGMA table_info(UserPlaylistTrack)").all();
+      if (!columns.some((column) => column.name === "position")) {
+        db.exec("ALTER TABLE UserPlaylistTrack ADD COLUMN position INTEGER NOT NULL DEFAULT 0");
+        db.exec("UPDATE UserPlaylistTrack SET position = id");
+      }
+    },
+  },
+  {
+    name: "010_guild_onboarding",
+    up: (db) => {
+      if (
+        !db
+          .prepare<[], ColumnInfo>("PRAGMA table_info(GuildSettings)")
+          .all()
+          .some((column) => column.name === "default_text_channel_id")
+      )
+        db.exec("ALTER TABLE GuildSettings ADD COLUMN default_text_channel_id TEXT");
+    },
+  },
+  {
+    name: "011_bot_settings",
+    up: (db) => {
+      db.exec(
+        "CREATE TABLE IF NOT EXISTS BotSettings (id INTEGER PRIMARY KEY CHECK(id = 1), settings_json TEXT NOT NULL)",
+      );
+    },
+  },
 ];
 
 export function runMigrations(db: Database): void {

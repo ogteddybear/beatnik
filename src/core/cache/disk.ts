@@ -8,6 +8,7 @@ import { type Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 import { config } from "../config";
+import { isProviderEnabled } from "../db/bot-settings";
 import { type EventOptions, logEvent } from "../db/guild-events";
 import { getGuildStorageLimit } from "../db/guild-settings";
 import { calculateGuildStorage, guildCacheDirectory } from "./storage";
@@ -193,6 +194,8 @@ export async function downloadPlaylist(
       const track = queue.shift();
       if (!track) break;
       try {
+        if (!isProviderEnabled(provider.id))
+          throw new Error("This provider is disabled by the bot owner.");
         const stream = await provider.getStream(track.id);
         if (
           await downloadToCache(guildId, track.id, stream, () => onDownloaded?.(track), {

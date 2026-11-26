@@ -60,4 +60,5 @@ export interface Provider {
 
   getStream: (uniqueId: string) => Promise<Readable>;
   search?: (query: string) => Promise<ProviderTrack | null>;
+  getRelatedTrack?: (last: ProviderTrack, excludedIds: string[]) => Promise<ProviderTrack | null>;
 }

@@ -5,6 +5,7 @@ import { log } from "@/shared";
 import type { Readable } from "node:stream";
 
 import { getDownloadedIdStream } from "./cache/disk";
+import { isProviderEnabled } from "./db/bot-settings";
 import { playlists } from "./db/playlist";
 import { tracks } from "./db/track";
 import { providers } from "./manager";
@@ -60,6 +61,8 @@ export async function resolveStream(
   id: string,
   provider: Provider,
 ): Promise<StreamResult> {
+  if (!isProviderEnabled(provider.id))
+    throw new Error("This provider is disabled by the bot owner.");
   // prefer disk cache, then provider method
   const cached = getDownloadedIdStream(guildId, id);
   if (cached) {
@@ -130,6 +133,7 @@ export async function resolveQuery(
   context?: ProviderContext,
 ): Promise<ResolveResult> {
   for (const provider of providers) {
+    if (!isProviderEnabled(provider.id)) continue;
     const resolution = await provider.resolve(input, context);
     if (!resolution) continue;
     const { resolvedQuery, type } = resolution;

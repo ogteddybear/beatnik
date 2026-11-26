@@ -9,6 +9,7 @@ import { log } from "@/shared";
 
 import { config } from "./config";
 import { type SavedSession, decodeSession, savedSessions } from "./db/session-state";
+import { publishGuildUpdate } from "./live-updates";
 import { CorePlayer } from "./player";
 import { Queue } from "./queue";
 
@@ -102,7 +103,10 @@ export function getOrCreateSession(guildId: string): GuildSession {
     const player = new CorePlayer(guildId, queue, providers);
     session = { queue, player };
     sessions.set(guildId, session);
-    queue.onChange = () => saveSessionState(guildId);
+    queue.onChange = () => {
+      saveSessionState(guildId);
+      publishGuildUpdate(guildId);
+    };
     player.onPersist = () => saveSessionState(guildId);
   }
   return session;
@@ -110,7 +114,9 @@ export function getOrCreateSession(guildId: string): GuildSession {
 
 export function deleteSession(guildId: string, preserveState = false) {
   if (!shuttingDown && !preserveState) savedSessions.delete(guildId);
+  sessions.get(guildId)?.player.suspend(); // Cancel pending playback/radio work on voice departure.
   sessions.delete(guildId);
+  publishGuildUpdate(guildId);
 }
 
 export function getSession(guildId: string): GuildSession | undefined {

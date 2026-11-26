@@ -80,3 +80,14 @@ test("YouTube search results without a video ID produce a clean error", async ()
     message: "No YouTube search results found.",
   });
 });
+
+test("YouTube radio search chooses a fresh result rather than repeating the seed", async () => {
+  const client = {
+    search: async () => ({
+      videos: ["seed", "fresh"].map((id) => ({ as: () => ({ video_id: id }) })),
+    }),
+    getBasicInfo: async (id: string) => ({ basic_info: { id, thumbnail: [] } }),
+  } as unknown as Innertube;
+  assert.equal((await search(client, "related", ["seed"]))?.id, "fresh");
+  await assert.rejects(search(client, "related", ["seed", "fresh"]), /No YouTube search results/);
+});

@@ -1,6 +1,8 @@
 import { calculateGuildStorage, guildStorageSummary } from "@/core/cache/storage";
 import { config } from "@/core/config";
 import { resolveCustomPlaylistTrack, supportedTrackUrl } from "@/core/custom-playlists";
+import { searchEvents, serverOverview } from "@/core/db/dashboard-search";
+import { eventCharts } from "@/core/db/event-charts";
 import {
   type EventFilters,
   eventExportBoundary,
@@ -28,6 +30,9 @@ import { setImmediate } from "node:timers/promises";
 import passport from "passport";
 
 import { EVENTS_CSV_HEADER, eventCsvRow } from "./events-csv";
+import { mountEventsStream } from "./events-stream";
+import { mountFinalPanel } from "./final-panel";
+import { mountGuildManagement } from "./guild-management";
 import {
   INVITE_CONFIRMATION_TTL,
   type InviteResult,
@@ -36,6 +41,8 @@ import {
   invitePresentation,
 } from "./invite";
 import { getInfrastructureMetrics } from "./metrics";
+import { mountOnboarding } from "./onboarding";
+import { mountPlaylistEditor } from "./playlist-editor";
 import { mountSpotifyAuth } from "./spotify-auth";
 
 interface DashboardUser {
@@ -465,6 +472,49 @@ export function createWebServer(
     return authorizedGuilds(client, req.user.id, (await response.json()) as DiscordGuild[]);
   }
 
+  mountFinalPanel(app, client, (req) =>
+    req.isAuthenticated() && isDashboardUser(req.user)
+      ? { id: req.user.id, username: req.user.username, avatarUrl: avatarUrlFor(req.user) }
+      : null,
+  );
+  app.get("/servers", async (req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    if (!req.isAuthenticated() || !isDashboardUser(req.user)) return res.redirect("/");
+    try {
+      const guilds = await visibleGuilds(req);
+      if (!guilds) return res.redirect("/logout");
+      const overview = serverOverview(guilds.map((guild) => guild.id));
+      const byId = new Map(overview.guilds.map((guild) => [guild.id, guild]));
+      return res.render("servers", {
+        username: req.user.username,
+        avatarUrl: avatarUrlFor(req.user),
+        isAdmin: req.user.id === ADMIN_USER_ID,
+        overview,
+        guilds: guilds.map((guild) => ({ ...byId.get(guild.id), id: guild.id, name: guild.name })),
+      });
+    } catch {
+      return res.status(502).send("Server statistics are temporarily unavailable.");
+    }
+  });
+  app.get("/api/admin/search", (req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    if (!req.isAuthenticated() || !isDashboardUser(req.user)) return res.sendStatus(401);
+    if (req.user.id !== ADMIN_USER_ID) return res.sendStatus(403);
+    const q = req.query.q;
+    const before =
+      req.query.before === undefined ? Number.MAX_SAFE_INTEGER : Number(req.query.before);
+    if (
+      typeof q !== "string" ||
+      !q.trim() ||
+      q.length > 200 ||
+      !Number.isSafeInteger(before) ||
+      before <= 0 ||
+      (req.query.before !== undefined &&
+        (typeof req.query.before !== "string" || !/^\d+$/.test(req.query.before)))
+    )
+      return res.sendStatus(400);
+    return res.json(searchEvents(q.trim(), before));
+  });
   app.get("/dashboard", async (req, res) => {
     if (!req.isAuthenticated() || !isDashboardUser(req.user)) return res.redirect("/");
     res.set("Cache-Control", "private, no-store");
@@ -514,6 +564,7 @@ export function createWebServer(
     if (!isDashboardUser(req.user)) return res.sendStatus(401);
     return res.json({ playlists: userPlaylists.list(req.user.id) });
   });
+  mountPlaylistEditor(app, playlistAuth, (req) => (isDashboardUser(req.user) ? req.user.id : null));
   app.post("/api/playlists", playlistAuth, express.json({ limit: "16kb" }), async (req, res) => {
     if (!isDashboardUser(req.user)) return res.sendStatus(401);
     const name: unknown = req.body?.name;
@@ -608,6 +659,56 @@ export function createWebServer(
     } catch {
       if (!res.destroyed) res.destroy();
     }
+  });
+  mountEventsStream(app, async (req) => {
+    if (!req.isAuthenticated() || !isDashboardUser(req.user)) return null;
+    // An open SSE request must not outlive logout/session expiry.
+    const alive = await new Promise<boolean>((resolve) =>
+      req.session.reload((error) => resolve(!error)),
+    );
+    if (!alive) return null;
+    const stored = (req.session as session.Session & { passport?: { user?: { id?: string } } })
+      .passport?.user;
+    if (stored?.id !== req.user.id) return null;
+    const guilds = await visibleGuilds(req);
+    return guilds ? { userId: req.user.id, guildIds: guilds.map((guild) => guild.id) } : null;
+  });
+  mountOnboarding(app, client, async (req) => {
+    if (!isDashboardUser(req.user)) return null;
+    const guilds = await visibleGuilds(req);
+    return guilds?.some((guild) => guild.id === req.params.guildId)
+      ? { id: req.user.id, username: req.user.username }
+      : null;
+  });
+  mountGuildManagement(
+    app,
+    client,
+    async (req) => {
+      if (!isDashboardUser(req.user)) return null;
+      const guilds = await visibleGuilds(req);
+      return guilds?.some((guild) => guild.id === req.params.guildId)
+        ? { id: req.user.id, username: req.user.username }
+        : null;
+    },
+    controlSession,
+  );
+  app.get("/api/dashboard/statistics", async (req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    if (!req.isAuthenticated() || !isDashboardUser(req.user)) return res.sendStatus(401);
+    try {
+      const guilds = await visibleGuilds(req);
+      if (!guilds) return res.sendStatus(401);
+      return res.json(eventCharts(guilds.map((guild) => guild.id)));
+    } catch {
+      return res.status(502).json({ error: "Statistics are temporarily unavailable." });
+    }
+  });
+  app.get("/api/admin/guilds/:guildId/statistics", (req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    if (!req.isAuthenticated() || !isDashboardUser(req.user)) return res.sendStatus(401);
+    if (req.user.id !== ADMIN_USER_ID) return res.sendStatus(403);
+    if (!client.guilds.cache.has(req.params.guildId)) return res.sendStatus(404);
+    return res.json(eventCharts([req.params.guildId]));
   });
   app.get("/api/dashboard/guilds", async (req, res) => {
     res.set("Cache-Control", "private, no-store");

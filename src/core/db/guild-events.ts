@@ -1,5 +1,6 @@
 import type { Statement } from "better-sqlite3";
 
+import { publishGuildUpdate } from "../live-updates";
 import { db } from "./client";
 
 export interface GuildEvent {
@@ -120,6 +121,7 @@ export function logEvent(opts: EventOptions): void {
     opts.username ?? null,
     opts.trackName ?? null,
   );
+  publishGuildUpdate(opts.guildId);
 }
 
 const latestEvents = db.prepare<[number], GuildEvent>(`

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+<head><%- include('head', { title: guildName + ' · Setup', live: false }) %>
+  <script src="/static/onboard.js" defer></script></head>
+<body data-guild-id="<%= guildId %>">
+  <%- include('navbar', { active: 'dashboard' }) %>
+  <main class="container page-container">
+    <h1 class="h2"><%= guildName %> · Server setup</h1>
+    <p>Only server managers and the bot owner can save setup. Changes apply to volume immediately; the Now Playing channel applies to new voice sessions.</p>
+    <form id="onboard-form" class="panel page-section">
+      <p id="wizard-progress" role="status" aria-live="polite">Step 1 of 4</p>
+      <fieldset data-step="0"><legend class="h4">1. Default volume</legend>
+        <label for="setup-volume" class="form-label">Volume: <output id="volume-output"><%= settings.volume %></output>%</label>
+        <input id="setup-volume" class="form-range" type="range" min="0" max="200" step="1" value="<%= settings.volume %>" />
+      </fieldset>
+      <fieldset data-step="1" hidden><legend class="h4">2. DJ role</legend>
+        <label for="setup-role" class="form-label">Role allowed to toggle autoplay</label>
+        <select id="setup-role" class="form-select"><option value="">No DJ role</option>
+          <% for (const role of roles) { %><option value="<%= role.id %>" <%= settings.dj_role_id === role.id ? 'selected' : '' %>><%= role.name %></option><% } %>
+        </select>
+      </fieldset>
+      <fieldset data-step="2" hidden><legend class="h4">3. Now Playing text channel</legend>
+        <label for="setup-channel" class="form-label">Default text channel</label>
+        <select id="setup-channel" class="form-select"><option value="">Use the command's channel</option>
+          <% for (const channel of channels) { %><option value="<%= channel.id %>" <%= settings.default_text_channel_id === channel.id ? 'selected' : '' %>><%= channel.name %></option><% } %>
+        </select>
+        <p class="small text-secondary">Only normal text channels where Sashimi can send messages and embeds are shown.</p>
+      </fieldset>
+      <fieldset data-step="3" hidden><legend class="h4">4. Autoplay</legend>
+        <div class="form-check"><input id="setup-autoplay" class="form-check-input" type="checkbox" <%= settings.autoplay_enabled ? 'checked' : '' %> />
+          <label for="setup-autoplay" class="form-check-label">Continue with related music when the queue finishes</label></div>
+      </fieldset>
+      <div class="d-flex gap-2 mt-4">
+        <button id="wizard-back" class="btn btn-outline-light" type="button" disabled>Back</button>
+        <button id="wizard-next" class="btn btn-primary" type="button">Next</button>
+        <button id="wizard-save" class="btn btn-primary" type="submit" hidden>Save setup</button>
+      </div>
+    </form>
+    <p id="wizard-status" role="status" aria-live="polite"></p>
+    <a href="/dashboard/guilds/<%= encodeURIComponent(guildId) %>">Queue &amp; settings →</a>
+  </main>
+</body></html>

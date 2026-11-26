@@ -18,6 +18,7 @@
       <p id="live-status" class="live-status mb-4" role="status" aria-live="polite" data-state="loading">Loading your servers…</p>
       <%- include('player-widget') %>
       <%- include('spotify-account', { account: typeof spotifyAccount === 'undefined' ? null : spotifyAccount }) %>
+      <%- include('statistics', { statisticsUrl: '/api/dashboard/statistics' }) %>
 
       <section aria-labelledby="servers-heading">
         <div class="d-flex align-items-baseline justify-content-between mb-3">

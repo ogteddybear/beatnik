@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+  <head>
+    <%- include('head', { title: guildName + ' · Queue & Settings', live: false }) %>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js" defer></script>
+    <script src="/static/live-events.js" defer></script>
+    <script src="/static/guild-manage.js" defer></script>
+  </head>
+  <body class="min-vh-100" data-guild-id="<%= guildId %>">
+    <%- include('navbar', { active: 'dashboard' }) %>
+    <main class="container page-container">
+      <a href="/dashboard">← Your servers</a>
+      <h1 class="h2 my-4"><%= guildName %> · Queue & Settings</h1>
+      <section class="panel page-section" aria-labelledby="settings-heading">
+        <h2 id="settings-heading" class="h4">Server settings</h2>
+        <form id="guild-settings">
+          <fieldset id="settings-fields" disabled>
+            <label for="volume" class="form-label">Default volume (%)</label>
+            <input id="volume" class="form-control mb-3" type="number" min="0" max="200" step="1" required />
+            <div class="form-check mb-3"><input id="autoplay" type="checkbox" class="form-check-input" /><label for="autoplay" class="form-check-label">Autoplay / radio mode</label></div>
+            <label for="dj-role" class="form-label">DJ role ID (optional)</label>
+            <input id="dj-role" class="form-control mb-3" inputmode="numeric" pattern="[0-9]{17,20}" />
+            <p class="small text-secondary">The DJ role may toggle /autoplay. Web changes still require Manage Server or bot-owner access. Volume changes also apply to current playback.</p>
+            <button class="btn btn-primary" type="submit">Save settings</button>
+          </fieldset>
+        </form>
+        <p id="settings-status" role="status" aria-live="polite">Loading settings…</p>
+      </section>
+      <section class="panel page-section" aria-labelledby="queue-heading">
+        <h2 id="queue-heading" class="h4">Full queue</h2>
+        <p class="text-secondary">Refreshes every 15 seconds. Drag a handle or use ↑/↓ to reorder. Positions are one-based. The current track keeps playing when reordered.</p>
+        <button id="refresh-queue" class="btn btn-outline-light mb-3" type="button">Refresh queue</button>
+        <p id="queue-status" role="status" aria-live="polite">Loading queue…</p>
+        <ol id="full-queue" class="list-group"></ol>
+      </section>
+    </main>
+  </body>
+</html>

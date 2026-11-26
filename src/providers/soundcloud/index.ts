@@ -9,6 +9,9 @@ const PROVIDER_ID = "soundcloud";
 export class SoundCloudProvider implements Provider {
   readonly id = PROVIDER_ID;
   private readonly sc = new SoundCloud();
+  getClientIdStatus() {
+    return this.sc.clientId ? "Client ID loaded (validity not probed)" : "No Client ID loaded";
+  }
 
   async resolve(query: string): Promise<ResolvedQuery | null> {
     let url: URL;

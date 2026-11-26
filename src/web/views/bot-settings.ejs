@@ -1,0 +1,14 @@
+<!doctype html><html lang="en" data-bs-theme="dark">
+<head><%- include('head', { title: 'Bot settings · Sashimi', live: false }) %><script src="/static/bot-settings.js" defer></script></head>
+<body><%- include('navbar', { active: 'admin' }) %><main class="container page-container">
+<h1>Bot settings</h1><p>Total guilds: <%= guildCount %></p>
+<form id="bot-settings" class="panel page-section">
+<label class="form-label" for="bot-status">Discord status</label>
+<select id="bot-status" class="form-select mb-3"><% for (const status of ['online','idle','dnd','invisible']) { %>
+<option value="<%= status %>" <%= settings.status === status ? 'selected' : '' %>><%= status %></option><% } %></select>
+<label class="form-label" for="bot-activity">Activity text (blank restores beat time)</label><input id="bot-activity" class="form-control mb-3" maxlength="128" value="<%= settings.activity %>" />
+<fieldset><legend class="h5">Globally enabled providers</legend><% for (const id of providerIds) { %>
+<div class="form-check"><input class="form-check-input" type="checkbox" id="provider-<%= id %>" data-provider="<%= id %>" <%= settings.providers[id] ? 'checked' : '' %> /><label class="form-check-label" for="provider-<%= id %>"><%= id %></label></div><% } %></fieldset>
+<p class="text-secondary">Changes persist across restarts. Disabling a provider blocks new resolution/playback starts, including cached tracks; current audio is not interrupted. Spotify playback also requires YouTube.</p>
+<button class="btn btn-primary">Save bot settings</button></form><p id="bot-settings-status" role="status" aria-live="polite"></p>
+</main></body></html>

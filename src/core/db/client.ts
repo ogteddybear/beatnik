@@ -66,7 +66,11 @@ const tableInit = `
 
   CREATE TABLE IF NOT EXISTS GuildSettings (
     guild_id TEXT PRIMARY KEY,
-    max_storage_bytes INTEGER NOT NULL DEFAULT 104857600 CHECK (max_storage_bytes >= 0)
+    max_storage_bytes INTEGER NOT NULL DEFAULT 104857600 CHECK (max_storage_bytes >= 0),
+    volume INTEGER DEFAULT 100,
+    autoplay_enabled INTEGER DEFAULT 0,
+    dj_role_id TEXT,
+    default_text_channel_id TEXT
   );
 
   CREATE TABLE IF NOT EXISTS GuildTrackMap (

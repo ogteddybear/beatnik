@@ -9,6 +9,7 @@ interface Playlist {
   created_at: number;
 }
 interface TrackRow {
+  id: number;
   provider_id: string;
   track_id: string;
   title: string;
@@ -18,20 +19,21 @@ interface TrackRow {
   thumbnail_url: string;
 }
 export interface CustomPlaylist extends Playlist {
-  tracks: ProviderTrack[];
+  tracks: (ProviderTrack & { playlistTrackId: number })[];
 }
 const MAX_TRACKS = 1000;
 const get = (owner: string, id: number) =>
   db
     .prepare<[string, number], Playlist>("SELECT * FROM UserPlaylist WHERE owner_id = ? AND id = ?")
     .get(owner, id);
-function tracks(id: number): ProviderTrack[] {
+function tracks(id: number): CustomPlaylist["tracks"] {
   return db
     .prepare<[number], TrackRow>(
-      "SELECT * FROM UserPlaylistTrack WHERE playlist_id = ? ORDER BY id",
+      "SELECT * FROM UserPlaylistTrack WHERE playlist_id = ? ORDER BY position, id",
     )
     .all(id)
     .map((row) => ({
+      playlistTrackId: row.id,
       id: row.track_id,
       providerId: row.provider_id,
       title: row.title,
@@ -45,8 +47,8 @@ function tracks(id: number): ProviderTrack[] {
 }
 function insertTrack(id: number, track: ProviderTrack) {
   db.prepare(
-    `INSERT INTO UserPlaylistTrack (playlist_id, provider_id, track_id, title, url, duration, channel_name, thumbnail_url)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO UserPlaylistTrack (playlist_id, provider_id, track_id, title, url, duration, channel_name, thumbnail_url, position)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT coalesce(max(position),0)+1 FROM UserPlaylistTrack WHERE playlist_id = ?))`,
   ).run(
     id,
     track.providerId,
@@ -56,9 +58,46 @@ function insertTrack(id: number, track: ProviderTrack) {
     track.length,
     track.channelName,
     track.thumbnailUrl,
+    id,
   );
 }
 export const userPlaylists = {
+  rename(owner: string, id: number, name: string) {
+    if (!name.trim() || name.trim().length > 100) throw new Error("Invalid name");
+    return (
+      db
+        .prepare("UPDATE UserPlaylist SET name = ? WHERE id = ? AND owner_id = ?")
+        .run(name.trim(), id, owner).changes === 1
+    );
+  },
+  removeTrack(owner: string, id: number, entryId: number) {
+    if (!get(owner, id)) return false;
+    return (
+      db.prepare("DELETE FROM UserPlaylistTrack WHERE playlist_id = ? AND id = ?").run(id, entryId)
+        .changes === 1
+    );
+  },
+  reorder: db.transaction((owner: string, id: number, ids: number[]) => {
+    if (!get(owner, id)) return false;
+    const existing = tracks(id);
+    if (
+      ids.length !== existing.length ||
+      new Set(ids).size !== ids.length ||
+      existing.some((track) => !ids.includes(track.playlistTrackId))
+    )
+      throw new Error("Playlist changed. Refresh and try again.");
+    const update = db.prepare(
+      "UPDATE UserPlaylistTrack SET position = ? WHERE playlist_id = ? AND id = ?",
+    );
+    ids.forEach((entryId, index) => update.run(index, id, entryId));
+    return true;
+  }),
+  append: db.transaction((owner: string, id: number, items: ProviderTrack[]) => {
+    if (!get(owner, id)) return false;
+    if (tracks(id).length + items.length > MAX_TRACKS) throw new Error("Track limit reached");
+    for (const track of items) insertTrack(id, track);
+    return true;
+  }),
   get(owner: string, id: number): CustomPlaylist | undefined {
     const playlist = get(owner, id);
     return playlist ? { ...playlist, tracks: tracks(id) } : undefined;

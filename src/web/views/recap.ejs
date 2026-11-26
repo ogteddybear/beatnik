@@ -1,0 +1,11 @@
+<!doctype html><html lang="en" data-bs-theme="dark">
+<head><%- include('head', { title: 'Your recap · Sashimi', live: false }) %></head>
+<body><%- include('navbar', { active: 'recap' }) %>
+<main class="container page-container"><h1>Your 30-day recap</h1>
+<section class="panel page-section">
+<p>Playback starts attributed to your queued tracks: <strong><%= recap.plays %></strong></p>
+<p>Top track: <strong><%= recap.topTrack?.name ?? 'Not recorded yet' %></strong></p>
+<p>Top artist / channel: <strong><%= recap.topArtist?.name ?? 'Not recorded yet' %></strong></p>
+<p>Estimated total track playtime: <strong><%= Math.round((recap.durationSeconds ?? 0) / 60) %> minutes</strong></p>
+<p class="text-secondary">Duration metadata is available for <%= recap.measuredPlays %> of <%= recap.plays %> starts. This sums track durations, not actual listening time, and includes tracks that may have been skipped. Artist and duration snapshots begin with this release; older missing values are not invented. This is not a record of who was listening in voice.</p>
+</section></main></body></html>

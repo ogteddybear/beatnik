@@ -159,6 +159,16 @@
       open.textContent = "View server analytics →";
       card.append(open);
     }
+    const manage = document.createElement("a");
+    manage.href = `/dashboard/guilds/${encodeURIComponent(guild.id)}`;
+    manage.className = "btn btn-outline-light mt-3 align-self-start";
+    manage.textContent = "Queue & settings →";
+    card.append(manage);
+    const setup = document.createElement("a");
+    setup.href = `/onboard/${encodeURIComponent(guild.id)}`;
+    setup.className = "btn btn-outline-light mt-2 align-self-start";
+    setup.textContent = "Server setup →";
+    card.append(setup);
     col.append(card);
     updateCard(col, guild);
     return col;
@@ -782,7 +792,8 @@
     });
   }
   void refresh();
-  setInterval(() => void refresh(), 15_000);
+  if (window.sashimiLive) window.sashimiLive(refresh);
+  else setInterval(() => void refresh(), 15_000);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) void refresh();
   });

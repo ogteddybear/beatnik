@@ -1,0 +1,13 @@
+{
+  "id": "/",
+  "name": "Sashimi Music",
+  "short_name": "Sashimi",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#101827",
+  "theme_color": "#101827",
+  "icons": [
+    { "src": "/static/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

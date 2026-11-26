@@ -66,7 +66,11 @@
         () => void mutate(remove, `/api/playlists/${playlist.id}`, "DELETE"),
       );
       card.prepend(title);
-      card.append(list, form, remove);
+      const edit = document.createElement("a");
+      edit.className = "btn btn-outline-light mb-3";
+      edit.href = `/playlists/${playlist.id}`;
+      edit.textContent = "Edit playlist";
+      card.append(list, edit, form, remove);
       col.append(card);
       root.append(col);
     }

@@ -1,6 +1,7 @@
 import type { Provider, ProviderPlaylist, ProviderTrack } from "@/providers";
 import { log } from "@/shared";
 
+import { isProviderEnabled } from "../db/bot-settings";
 import { logEvent } from "../db/guild-events";
 import { playlists } from "../db/playlist";
 import { tracks } from "../db/track";
@@ -86,6 +87,8 @@ export async function addTrackToLibrary(
     };
   }
   try {
+    if (!isProviderEnabled(provider.id))
+      throw new Error("This provider is disabled by the bot owner.");
     const stream = await provider.getStream(track.id);
     if (
       !(await downloadToCache(

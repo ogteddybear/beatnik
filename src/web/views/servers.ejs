@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+<head><%- include('head', { title: 'Servers · Sashimi', live: false }) %></head>
+<body class="min-vh-100">
+  <%- include('navbar', { active: 'servers' }) %>
+  <main class="container page-container">
+    <h1 class="h2">Your servers</h1>
+    <p class="text-secondary">Servers you manage where Sashimi is present. The bot owner can see all servers.</p>
+    <section class="panel page-section" aria-label="Cross-server totals">
+      <p>Total plays: <strong><%= overview.totalPlays %></strong> · Servers: <%= guilds.length %></p>
+      <p>Top requested track: <strong><%= overview.topTrack?.title ?? 'No requests recorded' %></strong></p>
+      <p class="small text-secondary">All-time recorded plays. Top tracks use live and archived requests grouped by recorded title; untitled historical requests are excluded.</p>
+    </section>
+    <section class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4" aria-label="Managed servers">
+      <% for (const guild of guilds) { %>
+        <div class="col"><article class="card dashboard-card p-4 h-100">
+          <h2 class="h4 text-break"><%= guild.name %></h2>
+          <p>Total plays: <%= guild.plays %></p>
+          <p class="text-break">Top track: <%= guild.topTrack?.title ?? 'No requests recorded' %></p>
+          <a class="btn btn-primary mt-auto" href="/dashboard/guilds/<%= encodeURIComponent(guild.id) %>">Jump to Dashboard</a>
+        </article></div>
+      <% } %>
+      <% if (!guilds.length) { %><p>No managed servers found. Invite Sashimi to a server you manage.</p><% } %>
+    </section>
+  </main>
+</body></html>

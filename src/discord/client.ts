@@ -14,6 +14,7 @@ import { Client, Events, GatewayIntentBits } from "discord.js";
 import { commandList } from "./commands";
 import { deployCommands } from "./commands/deploy-commands";
 import { errorReply } from "./messaging";
+import { welcomeGuild } from "./onboarding";
 import { handlePlayerButton } from "./player-buttons";
 import { startPresenceLifecycle } from "./presence";
 
@@ -153,6 +154,7 @@ export async function startDiscord() {
   });
 
   client.on(Events.InteractionCreate, handleInteraction);
+  client.on(Events.GuildCreate, welcomeGuild);
   client.on(Events.VoiceStateUpdate, handleVoiceStateUpdate);
 
   await client.login(config.discord.token);

@@ -526,3 +526,29 @@ a.server-card-title:hover {
     scroll-behavior: auto !important;
   }
 }
+/* Chart.js needs a positioned parent with an explicit responsive height. */
+.statistics-chart {
+  position: relative;
+  height: 320px;
+  min-width: 0;
+}
+.statistics-chart-line {
+  height: 260px;
+}
+[data-bs-theme="light"] {
+  color-scheme: light;
+  --accent: #254d91;
+  --surface-canvas: #f4f6fb;
+  --surface-section: #ffffff;
+  --surface-raised: #e8edf6;
+  --surface-hover: #dde6f4;
+  --border-color: #b9c5d7;
+  --text-primary: #17243b;
+  --text-secondary: #485b77;
+  --success: #23664e;
+  --success-surface: #e1f2e9;
+  --warning: #775000;
+  --warning-surface: #fff1ce;
+  --error: #9b2537;
+  --error-surface: #fbe6ea;
+}

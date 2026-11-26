@@ -4,7 +4,9 @@ import { REST, Routes } from "discord.js";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { builder as autoplay } from "./autoplay/builder";
 import { builder as clear } from "./clear/builder";
+import { builder as diagnostics } from "./diagnostics/builder";
 import { builder as history } from "./history/builder";
 import { builder as add } from "./library/add/builder";
 import { builder as load } from "./library/load/builder";
@@ -22,7 +24,7 @@ import { builder as stop } from "./stop/builder";
 import { builder as storage } from "./storage/builder";
 import { builder as volume } from "./volume/builder";
 
-const COMMANDS_VERSION = "1.8.0";
+const COMMANDS_VERSION = "1.9.0";
 const versionFile = path.join(config.libraryPath, ".commands-version");
 
 async function shouldDeploy() {
@@ -46,6 +48,8 @@ export async function deployCommands() {
     }
     const { token, clientId } = config.discord;
     const builders = [
+      autoplay,
+      diagnostics,
       add,
       load,
       play,

@@ -1,3 +1,4 @@
+import { isProviderEnabled } from "@/core/db/bot-settings";
 import { spotifyUsers } from "@/core/db/spotify-users";
 import { providers } from "@/core/manager";
 import type { AutocompleteHandler, CommandExecuter } from "@/discord/commands";
@@ -112,7 +113,9 @@ export async function handleSpotifyCommand(
         );
         return;
       }
-      const resolver = providers.find((provider) => provider.id === "spotify-link-resolver");
+      const resolver = providers.find(
+        (provider) => provider.id === "spotify-link-resolver" && isProviderEnabled(provider.id),
+      );
       if (!resolver) {
         await interaction.editReply("Spotify playback is not configured on this bot.");
         return;

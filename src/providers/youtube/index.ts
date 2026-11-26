@@ -5,7 +5,7 @@ import Stream from "node:stream";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import type { Innertube } from "youtubei.js";
 
-import type { Provider } from "../provider";
+import type { Provider, ProviderTrack } from "../provider";
 import type { YoutubeClientConfig } from "./client";
 import { createInnertubeClient } from "./client";
 import { getPlaylistInfo, getTrackInfo, resolve, search } from "./metadata";
@@ -94,6 +94,8 @@ export class YoutubeProvider implements Provider {
   getTrack = (id: string) => getTrackInfo(this.client, id);
   getPlaylist = (id: string) => getPlaylistInfo(this.client, id);
   search = (query: string) => search(this.client, query);
+  getRelatedTrack = (last: ProviderTrack, excludedIds: string[]) =>
+    search(this.client, `${last.title} ${last.channelName} related music`, excludedIds);
   getStream = async (id: string) => {
     try {
       const { audioStream } = await createSabrStream(this.client, id, DEFAULT_OPTIONS);

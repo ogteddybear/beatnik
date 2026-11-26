@@ -111,9 +111,15 @@ export async function getPlaylistInfo(yt: Innertube, id: string): Promise<Provid
   }
 }
 
-export async function search(yt: Innertube, query: string): Promise<ProviderTrack | null> {
+export async function search(
+  yt: Innertube,
+  query: string,
+  excludedIds: string[] = [],
+): Promise<ProviderTrack | null> {
   const search = await yt.search(query, { type: "video" });
-  const firstVideo = search.videos?.[0];
+  const firstVideo = excludedIds.length
+    ? search.videos?.find((video) => !excludedIds.includes(video.as(YTNodes.Video).video_id ?? ""))
+    : search.videos?.[0];
   if (!firstVideo) {
     throw new Error("No YouTube search results found.");
   }

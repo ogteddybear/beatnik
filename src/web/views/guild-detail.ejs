@@ -11,6 +11,7 @@
       <p class="text-secondary page-description">Requests count tracks added to the queue; plays count playback starts. Errors count only recorded failures.</p>
       <p class="small text-secondary">Server ID: <span class="mono"><%= guildId %></span></p>
       <p id="live-status" class="live-status" role="status" aria-live="polite" data-state="loading">Loading server activity…</p>
+      <%- include('statistics', { statisticsUrl: '/api/admin/guilds/' + encodeURIComponent(guildId) + '/statistics' }) %>
       <section aria-label="Server statistics" class="page-section panel">
         <h2 class="h4 mb-4">Listening overview</h2>
         <div class="table-responsive">

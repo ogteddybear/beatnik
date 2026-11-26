@@ -1,6 +1,8 @@
 import type { AutocompleteInteraction, ChatInputCommandInteraction } from "discord.js";
 
+import * as autoplay from "./autoplay/command";
 import * as clear from "./clear/command";
+import * as diagnostics from "./diagnostics/command";
 import * as history from "./history/command";
 import * as add from "./library/add/command";
 import * as load from "./library/load/command";
@@ -30,6 +32,8 @@ export type CommandExecuter = (interaction: ChatInputCommandInteraction) => Prom
 type CommandList = Record<string, Command>;
 
 export const commandList: CommandList = {
+  autoplay,
+  diagnostics,
   spotify,
   lyrics,
   history,
