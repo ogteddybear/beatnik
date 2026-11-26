@@ -12,7 +12,7 @@ interface ButtonSession {
     runControl(action: () => Promise<void>): Promise<boolean>;
   };
 }
-function currentSession(guildId: string): ButtonSession | undefined {
+export function getPlayerControlSession(guildId: string): ButtonSession | undefined {
   const session = getSession(guildId);
   const voice = getVoiceSession(guildId);
   return session && voice ? { player: session.player, voice } : undefined;
@@ -20,7 +20,7 @@ function currentSession(guildId: string): ButtonSession | undefined {
 
 export async function handlePlayerButton(
   interaction: ButtonInteraction,
-  lookup = currentSession,
+  lookup = getPlayerControlSession,
 ): Promise<void> {
   if (!/^player:(pause|skip|loop)$/.test(interaction.customId)) return;
   const session = interaction.guildId ? lookup(interaction.guildId) : undefined;

@@ -134,12 +134,29 @@ Track repeat applies only to natural completion, not explicit skips or errors.
 Queue repeat wraps to the first track; an entirely failed queue stops rather
 than retrying forever.
 
-The regular and owner dashboards show read-only Now Playing widgets for only the
+The regular and owner dashboards show Now Playing widgets for only the
 guilds already visible to that user, including artist, thumbnail, progress,
 loop/paused state, and up to five upcoming tracks. State refreshes every 15 seconds
 while the page is visible. Player queues, loop modes and pause state remain
 in-memory and reset on restart. Seeking is not offered: the current provider
 contract returns non-seekable streams without a start-offset API.
+Pause/resume, skip and stop buttons send authenticated remote actions. Unlike
+Discord buttons, web controls do not require presence in the voice channel:
+access requires the same bot-membership and MANAGE_GUILD/ADMINISTRATOR checks as
+the dashboard (or the configured owner). Every request rechecks permissions,
+requires JSON with `X-Sashimi-Request: control`, and uses the same voice-session
+mutex as Discord controls. Buttons show pending state and errors; failed network
+requests are never automatically retried, to avoid double-skipping.
+
+`/remove position:<1-based index>` removes a queue entry while preserving the
+current playback cursor. Removing the current track starts the next available
+track, or wraps in queue-loop mode. Users must be in the bot's voice channel.
+The previous saved-library removal subcommands are preserved under
+`/library-remove playlist` and `/library-remove saved-track` (the legacy `queue`
+subcommand is also available there). `/history` lists the last ten recorded
+playback starts for this guild, including the current track, repeats, and
+archived events. History survives restarts; older events without recorded titles
+show “Unknown track”. Command definitions use version `1.6.0`.
 
 Raw events older than 30 days are moved on startup and every 24 hours to
 `LIBRARY_PATH/library-archive.db`. Each bounded batch copies and deletes events
@@ -182,5 +199,6 @@ Sashimi uses Discord slash commands. You can type `/` in any text channel, and t
 | `/skip`  | Skips the current playing track in the queue. | `track`: Skip to a specific track in queue. |
 | `/shuffle` | Shuffles tracks in the queue after the currently playing song. | |
 | `/queue` | Lists the current queue and currently playing track. | `page`: View another page of the queue, if necessary. |
-| `/remove queue [track]` | Removes a track from the queue. | | |
-| `/remove (playlist \| saved-track) [item]` | Removes an item from your library. | |
+| `/remove [position]` | Removes a track at its 1-based queue position. | |
+| `/history` | Shows the last ten recorded playback starts for this server. | |
+| `/library-remove (playlist \| saved-track) [item]` | Removes an item from your library. | |

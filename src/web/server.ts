@@ -9,6 +9,7 @@ import {
 import { MB, setGuildStorageLimit } from "@/core/db/guild-settings";
 import { guildStats } from "@/core/db/guild-stats";
 import { getGuildPlayerState } from "@/core/manager";
+import { getPlayerControlSession } from "@/discord/player-buttons";
 import SQLiteStore from "connect-sqlite3";
 import { DiscordScope, Strategy as DiscordStrategy } from "discord-strategy";
 import type { Client } from "discord.js";
@@ -218,7 +219,7 @@ function safeEventDetails(metadata: string | null): string {
   }
 }
 
-export function createWebServer(client: Client) {
+export function createWebServer(client: Client, controlSession = getPlayerControlSession) {
   const clientID = process.env.DISCORD_CLIENT_ID || config.discord.clientId;
   const clientSecret = requiredEnv("DISCORD_CLIENT_SECRET");
   const callbackURL = requiredEnv("DISCORD_REDIRECT_URI");
@@ -440,6 +441,7 @@ export function createWebServer(client: Client) {
     if (req.user.id === ADMIN_USER_ID) return authorizedGuilds(client, req.user.id, []);
     const response = await fetch("https://discord.com/api/users/@me/guilds", {
       headers: { Authorization: `Bearer ${req.user.accessToken}` },
+      signal: AbortSignal.timeout(5000),
     });
     if (response.status === 401 || response.status === 403) return null;
     if (!response.ok) throw new Error("Discord guild permissions unavailable");
@@ -476,6 +478,66 @@ export function createWebServer(client: Client) {
       return res.sendStatus(502);
     }
   });
+  app.post(
+    "/api/dashboard/guilds/:guildId/control",
+    async (req, res, next) => {
+      res.set("Cache-Control", "private, no-store");
+      if (!req.isAuthenticated() || !isDashboardUser(req.user)) return res.sendStatus(401);
+      // JSON + custom header block cross-site forms; no cross-origin access is granted.
+      if (req.get("X-Sashimi-Request") !== "control" || !req.is("application/json"))
+        return res.sendStatus(403);
+      try {
+        const guilds = await visibleGuilds(req);
+        if (!guilds) return res.sendStatus(401);
+        if (!guilds.some((guild) => guild.id === req.params.guildId)) return res.sendStatus(403);
+      } catch {
+        return res.status(502).json({ error: "Discord permissions are temporarily unavailable." });
+      }
+      next();
+    },
+    express.json({ limit: "1kb" }),
+    async (req, res) => {
+      const action: unknown = req.body?.action;
+      if (action !== "pause" && action !== "resume" && action !== "skip" && action !== "stop")
+        return res.status(400).json({ error: "Invalid player action." });
+      if (!isDashboardUser(req.user)) return res.sendStatus(401);
+      const session = controlSession(req.params.guildId);
+      if (!session) return res.status(409).json({ error: "There is no active player." });
+      const { id, username } = req.user;
+      let applied = false;
+      try {
+        const accepted = await session.voice.runControl(async () => {
+          const current = controlSession(req.params.guildId);
+          if (current?.player !== session.player || current?.voice !== session.voice) return;
+          const { player } = session;
+          if (!player.isPlaying || (player.isLoading && action !== "stop")) return;
+          switch (action) {
+            case "pause":
+              applied = player.isPaused || player.pause(id, username);
+              break;
+            case "resume":
+              applied = !player.isPaused || player.resume(id, username);
+              break;
+            case "skip":
+              await player.skip(id, undefined, username);
+              applied = true;
+              break;
+            case "stop":
+              await player.stop(id, username);
+              applied = true;
+              break;
+          }
+        });
+        if (!accepted || !applied)
+          return res
+            .status(409)
+            .json({ error: "The player is busy or changing tracks. Please try again." });
+        return res.json({ player: getGuildPlayerState(req.params.guildId) });
+      } catch {
+        return res.status(503).json({ error: "The player action could not be applied." });
+      }
+    },
+  );
   app.get("/api/admin/guilds", async (req, res) => {
     res.set("Cache-Control", "private, no-store");
     if (!req.isAuthenticated() || !isDashboardUser(req.user)) return res.sendStatus(401);

@@ -2,10 +2,9 @@ import { deletePlaylistFromLibrary, deleteTrackFromLibrary } from "@/core/cache/
 import { logEvent } from "@/core/db/guild-events";
 import { playlists } from "@/core/db/playlist";
 import { tracks } from "@/core/db/track";
-import { getSession } from "@/core/manager";
 import type { AutocompleteHandler, CommandExecuter } from "@/discord/commands";
-import { noQueueReply } from "@/discord/messaging";
-import { MessageFlags, inlineCode } from "discord.js";
+import { removeQueueWithInteraction } from "@/discord/commands/remove/command";
+import { inlineCode } from "discord.js";
 
 export const autocomplete: AutocompleteHandler = async (interaction) => {
   const focusedValue = interaction.options.getFocused(true);
@@ -33,19 +32,7 @@ export const execute: CommandExecuter = async (interaction) => {
   const subcommand = interaction.options.getSubcommand();
   if (subcommand === "queue") {
     const trackNumber = interaction.options.getInteger("track", true);
-    const session = getSession(guildId);
-    if (!session) {
-      await interaction.reply(noQueueReply);
-      return;
-    }
-    const removed = session.queue.remove(trackNumber - 1);
-    if (trackNumber - 1 === session.queue.currentIndex) {
-      await session.player.next();
-    }
-    await interaction.reply({
-      content: `Removed ${removed[0].title} from queue!`,
-      flags: MessageFlags.Ephemeral,
-    });
+    await removeQueueWithInteraction(interaction, trackNumber);
     return;
   } else if (subcommand === "playlist") {
     const int_id = interaction.options.getInteger("playlist-name", true);

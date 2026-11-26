@@ -287,6 +287,39 @@ export class CorePlayer {
     await this.play();
   }
 
+  async remove(
+    position: number,
+    userId: string,
+    username?: string,
+  ): Promise<QueuedTrack | undefined> {
+    if (!Number.isInteger(position) || position < 1 || position > this.queue.tracks.length) return;
+    if (this.isLoading) throw new Error("The player is changing tracks. Please try again.");
+    const index = position - 1;
+    const currentIndex = this.queue.currentIndex;
+    const [removed] = this.queue.remove(index);
+    this.failedTracks.clear();
+    this.logPlayerEvent({
+      userId,
+      username,
+      eventType: "player",
+      action: "remove",
+      trackId: removed.id,
+      trackName: removed.title,
+      metadata: { position },
+    });
+    if (index < currentIndex) this.queue.currentIndex--;
+    else if (index === currentIndex) {
+      // Splicing already shifted the next track into this slot. Do not advance
+      // again (or repeat the removed track when track-loop is enabled).
+      if (this.queue.loopMode === "queue" && this.queue.currentIndex >= this.queue.tracks.length)
+        this.queue.currentIndex = 0;
+      await this.play();
+      return removed;
+    }
+    this.onStateChange?.();
+    return removed;
+  }
+
   async stop(userId: string | null = null, username?: string) {
     this.generation++;
     if (this.queue.tracks.length || this.isPlaying) {

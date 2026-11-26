@@ -14,6 +14,8 @@
   let listLoaded = false;
   let summaryLoaded = false;
   let activityLoaded = false;
+  const pendingControls = new Map();
+  let playerGuilds = [];
   const list = document.getElementById("guild-list");
 
   async function load(url) {
@@ -247,6 +249,7 @@
   }
 
   function refreshPlayers(guilds) {
+    playerGuilds = guilds;
     const root = document.getElementById("live-players");
     if (!root) return;
     const content = document.createDocumentFragment();
@@ -255,6 +258,7 @@
       if (!state) continue;
       const card = document.createElement("article");
       card.className = "border-top pt-3 mt-3";
+      card.dataset.playerGuildId = guild.id;
       const header = document.createElement("div");
       header.className = "d-flex align-items-center gap-3";
       if (/^https?:\/\//i.test(state.track.thumbnail || "")) {
@@ -302,6 +306,44 @@
       bar.style.width = `${percent}%`;
       progress.append(bar);
       card.append(position, progress);
+      const controls = document.createElement("div");
+      controls.className = "d-flex gap-2 mt-3";
+      const pendingToggle = pendingControls.get(guild.id);
+      const toggleAction =
+        pendingToggle === "pause" || pendingToggle === "resume"
+          ? pendingToggle
+          : state.status === "paused"
+            ? "resume"
+            : "pause";
+      for (const [action, label, icon] of [
+        toggleAction === "resume"
+          ? ["resume", "Resume", "play-fill"]
+          : ["pause", "Pause", "pause-fill"],
+        ["skip", "Skip", "skip-forward-fill"],
+        ["stop", "Stop", "stop-fill"],
+      ]) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `btn btn-sm ${action === "stop" ? "btn-outline-danger" : "btn-outline-light"}`;
+        button.dataset.playerAction = action;
+        button.setAttribute("aria-label", `${label} playback in ${guild.name}`);
+        button.disabled =
+          pendingControls.has(guild.id) || (state.status === "loading" && action !== "stop");
+        const symbol = document.createElement("i");
+        symbol.className = `bi bi-${icon} me-1`;
+        symbol.setAttribute("aria-hidden", "true");
+        button.append(symbol, document.createTextNode(label));
+        if (pendingControls.get(guild.id) === action) {
+          const spinner = document.createElement("span");
+          spinner.className = "spinner-border spinner-border-sm ms-2";
+          spinner.setAttribute("aria-hidden", "true");
+          button.setAttribute("aria-busy", "true");
+          button.append(spinner);
+        }
+        button.addEventListener("click", () => void controlPlayer(guild.id, action, guild.name));
+        controls.append(button);
+      }
+      card.append(controls);
       if (state.nextTracks.length) {
         const label = document.createElement("p");
         label.className = "small text-secondary mt-3 mb-1";
@@ -324,6 +366,47 @@
       content.append(empty);
     }
     root.replaceChildren(content);
+  }
+
+  async function controlPlayer(guildId, action, guildName) {
+    if (pendingControls.has(guildId)) return;
+    const feedback = document.getElementById("player-control-status");
+    pendingControls.set(guildId, action);
+    refreshPlayers(playerGuilds);
+    feedback.textContent = `Applying ${action} in ${guildName}…`;
+    try {
+      const response = await fetch(`/api/dashboard/guilds/${encodeURIComponent(guildId)}/control`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-Sashimi-Request": "control" },
+        body: JSON.stringify({ action }),
+      });
+      if (!response.ok) {
+        throw new Error(
+          response.status === 401
+            ? "Sign in again to control playback."
+            : response.status === 403
+              ? "You no longer have permission to control this server."
+              : response.status === 409
+                ? "The player is busy or no longer active. Please try again."
+                : "The player action could not be applied. Check the current player before retrying.",
+        );
+      }
+      feedback.textContent = `Applied ${action} in ${guildName}.`;
+      try {
+        await refreshList();
+      } catch {
+        feedback.textContent += " Status refresh failed; it will refresh on the next poll.";
+      }
+    } catch (error) {
+      feedback.textContent =
+        error instanceof TypeError
+          ? "Connection interrupted. The action may have completed; refresh before retrying."
+          : error.message;
+    } finally {
+      pendingControls.delete(guildId);
+      refreshPlayers(playerGuilds);
+    }
   }
 
   async function refreshInfrastructure() {

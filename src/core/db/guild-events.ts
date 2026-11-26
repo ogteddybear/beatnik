@@ -133,6 +133,18 @@ export function getLatestEvents(limit = 100): GuildEvent[] {
   return latestEvents.all(Math.min(Math.max(Math.trunc(limit), 0), 100));
 }
 
+export function getGuildPlaybackHistory(guildId: string): GuildEvent[] {
+  return db
+    .prepare<[string], GuildEvent>(
+      `
+    SELECT ${EVENT_COLUMNS} FROM ${EVENT_HISTORY}
+    WHERE guild_id = ? AND event_type = 'player' AND action = 'play'
+    ORDER BY created_at DESC, id DESC LIMIT 10
+  `,
+    )
+    .all(guildId);
+}
+
 export interface EventFilters {
   from: number;
   to: number;

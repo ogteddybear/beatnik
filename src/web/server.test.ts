@@ -1,3 +1,4 @@
+import type { CorePlayer } from "@/core/player";
 import Database from "better-sqlite3";
 import type { Client } from "discord.js";
 import assert from "node:assert/strict";
@@ -119,7 +120,20 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
   assert.match(detail, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
   assert.doesNotMatch(detail, /<script>alert\(1\)<\/script>/);
   const client = { guilds: { cache: guilds }, users: { cache: new Map() } } as unknown as Client;
-  const server = createWebServer(client).listen(0, "127.0.0.1");
+  let controlBusy = false;
+  let controlCalls = 0;
+  const remoteSessions = new Map<
+    string,
+    {
+      player: CorePlayer;
+      voice: {
+        channelId: string;
+        isCurrentMessage(id: string): boolean;
+        runControl(action: () => Promise<void>): Promise<boolean>;
+      };
+    }
+  >();
+  const server = createWebServer(client, (id) => remoteSessions.get(id)).listen(0, "127.0.0.1");
   try {
     await new Promise<void>((resolve) => server.once("listening", resolve));
     const address = server.address();
@@ -203,9 +217,11 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
     assert.match(await replay.text(), /couldn’t verify this callback/);
 
     const originalFetch = globalThis.fetch;
+    let permissionsUnavailable = false;
     globalThis.fetch = (async (url: string | URL | Request, options?: RequestInit) => {
       const target = String(url);
       if (target === "https://discord.com/api/users/@me/guilds") {
+        if (permissionsUnavailable) return new Response("", { status: 503 });
         return Response.json(userGuilds);
       }
       if (target === "https://discord.com/api/oauth2/token") {
@@ -283,6 +299,20 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
         }));
         session.player.isPlaying = true;
         session.player.onPosition = () => 15;
+        session.player.onPause = () => true;
+        remoteSessions.set(id, {
+          player: session.player,
+          voice: {
+            channelId: "voice",
+            isCurrentMessage: () => true,
+            runControl: async (action) => {
+              controlCalls++;
+              if (controlBusy) return false;
+              await action();
+              return true;
+            },
+          },
+        });
       }
       const request = (uri: string, cookie: string) =>
         originalFetch(`${origin}${uri}`, { headers: { Cookie: cookie }, redirect: "manual" });
@@ -436,6 +466,68 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
       assert.equal(archivedBody.events.length, 1);
       assert.equal(archivedBody.events[0].username, "Archived listener");
       assert.equal(archivedBody.events[0].trackName, "Archived song");
+      const control = (body: unknown, cookie = memberCookie, guild = "managed", header = true) =>
+        originalFetch(`${origin}/api/dashboard/guilds/${guild}/control`, {
+          method: "POST",
+          headers: {
+            Cookie: cookie,
+            "Content-Type": "application/json",
+            ...(header ? { "X-Sashimi-Request": "control" } : {}),
+          },
+          body: JSON.stringify(body),
+        });
+      assert.equal((await control({ action: "pause" }, "")).status, 401);
+      assert.equal(
+        (await control({ action: "pause" }, memberCookie, "managed", false)).status,
+        403,
+      );
+      assert.equal((await control({ action: "stop" }, memberCookie, "member")).status, 403);
+      assert.equal((await control({ action: "stop" }, memberCookie, "missing")).status, 403);
+      assert.equal(controlCalls, 0, "Unauthorized requests never acquire a player mutex");
+      for (const body of [{}, { action: "remove" }, { action: 123 }, null])
+        assert.equal((await control(body)).status, 400);
+      assert.equal((await control({ action: "pause" })).status, 200);
+      assert.equal(remoteSessions.get("managed")?.player.isPaused, true);
+      assert.equal((await control({ action: "pause" })).status, 200, "Pause is idempotent");
+      assert.equal((await control({ action: "resume" })).status, 200);
+      assert.equal(remoteSessions.get("managed")?.player.isPaused, false);
+      let skips = 0;
+      const managedPlayer = remoteSessions.get("managed")?.player;
+      assert(managedPlayer);
+      managedPlayer.skip = async (id, _index, username) => {
+        assert.equal(id, "ordinary-user");
+        assert.equal(username, "Test");
+        skips++;
+      };
+      assert.equal((await control({ action: "skip" })).status, 200);
+      assert.equal(skips, 1);
+      controlBusy = true;
+      assert.equal((await control({ action: "skip" })).status, 409);
+      assert.equal(skips, 1);
+      controlBusy = false;
+      managedPlayer.isLoading = true;
+      assert.equal((await control({ action: "skip" })).status, 409);
+      managedPlayer.isLoading = false;
+      const managedMembership = userGuilds[0];
+      managedMembership.permissions = "0";
+      assert.equal(
+        (await control({ action: "pause" })).status,
+        403,
+        "Revoked permissions are checked per request",
+      );
+      managedMembership.permissions = "32";
+      permissionsUnavailable = true;
+      assert.equal((await control({ action: "pause" })).status, 502);
+      permissionsUnavailable = false;
+      assert.equal((await control({ action: "pause" }, ownerCookie, "member")).status, 200);
+      assert.equal(remoteSessions.get("member")?.player.isPaused, true);
+      const stopped = await control({ action: "stop" });
+      assert.equal(stopped.status, 200);
+      assert.equal((await stopped.json()).player, null);
+      assert.equal(managedPlayer.isPlaying, false);
+      assert.equal((await control({ action: "skip" })).status, 409);
+      remoteSessions.delete("managed");
+      assert.equal((await control({ action: "pause" })).status, 409);
     } finally {
       globalThis.fetch = originalFetch;
     }

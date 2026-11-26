@@ -1,7 +1,7 @@
 import { SlashCommandBuilder } from "discord.js";
 
 export const builder = new SlashCommandBuilder()
-  .setName("remove")
+  .setName("library-remove")
   .setDescription("Delete a track from the queue or a saved URL.")
   .addSubcommand((sc) =>
     sc
