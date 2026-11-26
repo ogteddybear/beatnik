@@ -41,7 +41,7 @@ export async function getTrackInfo(
       length: basic_info.duration ?? 0,
       id: basic_info.id ?? "Unknown",
       channelName: basic_info.author ?? basic_info.channel?.name ?? "Unknown",
-      thumbnailUrl: basic_info.thumbnail?.[0].url ?? "Unknown",
+      thumbnailUrl: basic_info.thumbnail?.[0]?.url ?? "Unknown",
       loudness: getLoudnessFromInfo(info),
       playlistIdx: playlistIdx !== undefined ? playlistIdx : null,
     };
@@ -73,13 +73,14 @@ export async function getPlaylistInfo(yt: Innertube, id: string): Promise<Provid
       Promise.all(
         totalItems.map(async (item, index) => {
           if (isPlaylistVideo(item)) {
+            if (!item.id) return null;
             return {
               providerId: PROVIDER_ID,
               id: item.id,
-              title: item.title.text ?? "Unknown",
-              length: item.duration.seconds,
-              channelName: item.author.name,
-              thumbnailUrl: item.thumbnails?.[0].url,
+              title: item.title?.text ?? "Unknown",
+              length: item.duration?.seconds ?? 0,
+              channelName: item.author?.name ?? "Unknown",
+              thumbnailUrl: item.thumbnails?.[0]?.url ?? "Unknown",
               playlistIdx: index,
               url: trackIdToURL(item.id),
               // loudness not available from getPlaylist, would require individual calls
@@ -94,7 +95,7 @@ export async function getPlaylistInfo(yt: Innertube, id: string): Promise<Provid
             return getTrackInfo(yt, item.content_id, index);
           }
         }),
-      ).then((tracks) => tracks.filter((t): t is ProviderTrack => t !== null));
+      ).then((tracks) => tracks.filter((t): t is ProviderTrack => t != null));
 
     return {
       providerId: PROVIDER_ID,
@@ -102,7 +103,7 @@ export async function getPlaylistInfo(yt: Innertube, id: string): Promise<Provid
       title: playlistInfo.info.title ?? "Unknown",
       url: playlistIdToURL(id),
       id,
-      authorName: playlistInfo.info.author.name,
+      authorName: playlistInfo.info.author?.name ?? "Unknown",
     };
   } catch (err) {
     console.error(err);
@@ -112,9 +113,13 @@ export async function getPlaylistInfo(yt: Innertube, id: string): Promise<Provid
 
 export async function search(yt: Innertube, query: string): Promise<ProviderTrack | null> {
   const search = await yt.search(query, { type: "video" });
-  const videoId = search.videos[0].as(YTNodes.Video).video_id;
+  const firstVideo = search.videos?.[0];
+  if (!firstVideo) {
+    throw new Error("No YouTube search results found.");
+  }
+  const videoId = firstVideo.as(YTNodes.Video).video_id;
   if (!videoId) {
-    throw new Error("No search results found.");
+    throw new Error("No YouTube search results found.");
   }
   return await getTrackInfo(yt, videoId);
 }

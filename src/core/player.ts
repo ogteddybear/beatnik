@@ -8,7 +8,7 @@ import { guildStats } from "./db/guild-stats";
 import type { LoopMode, Queue, QueuedTrack } from "./queue";
 import { shuffleArray } from "./queue";
 import {
-  isUnplayableYouTubeStreamError,
+  isUnplayableStreamError,
   resolveQuery,
   resolveStream,
   resolveTrackLoudness,
@@ -198,7 +198,7 @@ export class CorePlayer {
         streamResult = await resolveStream(this.guildId, track.id, provider);
       } catch (err) {
         if (generation !== this.generation) return;
-        if (!isUnplayableYouTubeStreamError(err, provider)) throw err;
+        if (!isUnplayableStreamError(err, provider)) throw err;
         log({
           level: "WARN",
           component: "CORE",

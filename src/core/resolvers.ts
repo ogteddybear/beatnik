@@ -1,5 +1,6 @@
 import type { Provider, ProviderPlaylist, ProviderTrack } from "@/providers";
 import type { ProviderContext } from "@/providers/provider";
+import { SoundCloudStreamUnavailableError } from "@/providers/soundcloud/errors";
 import { log } from "@/shared";
 import type { Readable } from "node:stream";
 
@@ -68,10 +69,17 @@ export async function resolveStream(
     const stream = await provider.getStream(id);
     return { stream, fromCache: false };
   } catch (err) {
-    if (isUnplayableYouTubeStreamError(err, provider)) throw err;
+    if (isUnplayableStreamError(err, provider)) throw err;
     log({ level: "ERROR", message: `${err}`, component: "CORE", name: "PLAYER" });
     throw new Error(`${err}`);
   }
+}
+
+export function isUnplayableStreamError(err: unknown, provider: Provider): boolean {
+  return (
+    (provider.id === "soundcloud" && err instanceof SoundCloudStreamUnavailableError) ||
+    isUnplayableYouTubeStreamError(err, provider)
+  );
 }
 
 export function isUnplayableYouTubeStreamError(err: unknown, provider: Provider): boolean {

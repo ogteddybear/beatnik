@@ -1,7 +1,8 @@
 import SoundCloud, { type Track } from "@zibot/scdl";
-import type { Readable } from "node:stream";
+import { Readable } from "node:stream";
 
 import type { Provider, ProviderPlaylist, ProviderTrack, ResolvedQuery } from "../provider";
+import { SoundCloudStreamUnavailableError } from "./errors";
 
 const PROVIDER_ID = "soundcloud";
 
@@ -75,7 +76,14 @@ export class SoundCloudProvider implements Provider {
 
   async getStream(id: string): Promise<Readable> {
     const url = Buffer.from(id, "base64url").toString("utf-8");
-    return await this.sc.downloadTrack(url);
+    try {
+      const stream = await this.sc.downloadTrack(url);
+      // scdl can return null after swallowing a download failure.
+      if (!(stream instanceof Readable)) throw new SoundCloudStreamUnavailableError();
+      return stream;
+    } catch {
+      throw new SoundCloudStreamUnavailableError();
+    }
   }
 
   private mapTrack(track: Track, playlistIdx: number | null = null): ProviderTrack {
