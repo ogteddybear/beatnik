@@ -15,6 +15,7 @@ interface LiveAudio {
   isDestroyed: () => boolean;
   setResource: (resource: AudioResource) => void;
   resetResource: (resource: AudioResource) => void;
+  onStage?: (stage: "voice" | "redirect" | "buffering" | "playing") => void;
 }
 
 /** Resource factory seam keeps timeout tests independent of FFmpeg and Discord. */
@@ -27,8 +28,10 @@ export function createLiveStreamHandler(
   resolveUrl = resolveLiveStreamUrl,
 ): NonNullable<CorePlayer["onLiveStream"]> {
   return async (url, isCurrent, disconnected, attempt) => {
+    audio.onStage?.("voice");
     await audio.ready();
     if (audio.isDestroyed() || !isCurrent() || attempt.signal.aborted) return;
+    audio.onStage?.("redirect");
     const resolvedUrl = await resolveUrl(url, { signal: attempt.signal });
     if (audio.isDestroyed() || !isCurrent() || attempt.signal.aborted) return;
     // Arbitrary MP3 URL -> prism FFmpeg PCM -> inline volume -> Opus.
@@ -41,6 +44,7 @@ export function createLiveStreamHandler(
     resource.playStream.once("end", disconnected);
     attempt.onResourceCreated();
     try {
+      audio.onStage?.("buffering");
       audio.audioPlayer.play(resource);
       await entersState(audio.audioPlayer, AudioPlayerStatus.Playing, attempt.signal);
     } catch (error) {
@@ -48,5 +52,6 @@ export function createLiveStreamHandler(
       throw error;
     }
     if (!isCurrent() || audio.isDestroyed()) audio.resetResource(resource);
+    else audio.onStage?.("playing");
   };
 }

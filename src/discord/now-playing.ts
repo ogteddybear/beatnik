@@ -99,6 +99,7 @@ export class NowPlayingPanel {
   private closed = false;
   private lastLiveEdit = 0;
   private lastLiveStation?: string;
+  private lastLiveStatus?: PlayerState["status"];
   constructor(
     private channel: PanelChannel,
     private player: CorePlayer,
@@ -118,12 +119,14 @@ export class NowPlayingPanel {
           state.isLive &&
           this.message &&
           this.lastLiveStation === state.track.id &&
+          this.lastLiveStatus === state.status &&
           Date.now() - this.lastLiveEdit < 60_000
         )
           return;
         const payload = nowPlayingPayload(state);
         this.lastLiveEdit = state.isLive ? Date.now() : 0;
         this.lastLiveStation = state.isLive ? state.track.id : undefined;
+        this.lastLiveStatus = state.isLive ? state.status : undefined;
         if (this.message) {
           try {
             await this.message.edit(payload);

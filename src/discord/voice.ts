@@ -109,6 +109,13 @@ export class VoiceSession {
       resetResource: (resource) => {
         if (this.resource === resource) corePlayer.onResetAudio?.();
       },
+      onStage: (stage) => {
+        log({
+          component: "DISCORD",
+          name: "LIVE",
+          message: `Guild ${this.guildId}: live playback stage=${stage}`,
+        });
+      },
     });
     corePlayer.onLiveUnavailable = (stationName) => {
       if (this.textChannel?.isSendable()) {
@@ -189,7 +196,15 @@ export class VoiceSession {
     this.audioPlayer.on("error", (err) => {
       if (corePlayer.isLive) {
         // A late error from an old resource must not restart a newer station.
-        if (err.resource === this.resource) void corePlayer.finish(true);
+        if (err.resource === this.resource) {
+          log({
+            level: "WARN",
+            component: "DISCORD",
+            name: "LIVE",
+            message: `Guild ${this.guildId}: live audio failed: ${err.message}`,
+          });
+          void corePlayer.finish(true);
+        }
         return;
       }
       this.trackFailed = true;

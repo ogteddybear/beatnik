@@ -517,8 +517,16 @@ export class CorePlayer {
       this.isPlaying = true;
       this.isLoading = false;
       this.notifyStateChange();
-    } catch {
-      if (isCurrent()) this.reconnectLive();
+    } catch (error) {
+      if (isCurrent()) {
+        log({
+          level: "WARN",
+          component: "CORE",
+          name: "PLAYER",
+          message: `Guild ${this.guildId}: ${station.name} connection attempt ${this.liveAttempts}/2 failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+        });
+        this.reconnectLive();
+      }
     } finally {
       if (timeout) clearTimeout(timeout);
       controller.signal.removeEventListener("abort", onAbort);

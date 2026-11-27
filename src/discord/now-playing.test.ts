@@ -4,6 +4,48 @@ import { test } from "node:test";
 
 import { NowPlayingPanel, nowPlayingPayload } from "./now-playing";
 
+test("live panel immediately reflects playback and reconnect transitions, but throttles unchanged refreshes", async () => {
+  const state: PlayerState = {
+    isLive: true,
+    status: "loading",
+    track: {
+      id: "technobase",
+      title: "TechnoBase.FM",
+      artist: "HandsUp",
+      thumbnail: "",
+      durationSeconds: 0,
+    },
+    progressSeconds: 0,
+    progressPercent: 0,
+    loopMode: "off",
+    nextTracks: [],
+  };
+  let edits = 0;
+  const panel = new NowPlayingPanel(
+    {
+      async send() {
+        return {
+          id: "live-panel",
+          async edit() {
+            edits++;
+          },
+        };
+      },
+    },
+    { getState: () => state } as CorePlayer,
+  );
+  await panel.refresh();
+  state.status = "playing";
+  await panel.refresh();
+  assert.equal(edits, 1, "Playing must immediately replace Connecting");
+  await panel.refresh();
+  assert.equal(edits, 1, "Unchanged live refreshes must stay throttled");
+  state.status = "loading";
+  await panel.refresh();
+  assert.equal(edits, 2, "A reconnect must immediately replace Playing");
+  await panel.close();
+});
+
 test("persistent player panel edits across tracks, replaces deleted messages and disables on close", async () => {
   const state: PlayerState = {
     status: "playing",
