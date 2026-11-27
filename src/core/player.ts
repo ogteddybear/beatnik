@@ -482,6 +482,7 @@ export class CorePlayer {
     this.liveAttempts++;
     this.isPlaying = false;
     this.isLoading = true;
+    let connected = false;
     let timeout: ReturnType<typeof setTimeout> | undefined;
     let onAbort: () => void = () => undefined;
     const cancelled = new Promise<never>((_resolve, reject) => {
@@ -516,6 +517,7 @@ export class CorePlayer {
       this.liveAttempts = 0;
       this.isPlaying = true;
       this.isLoading = false;
+      connected = true;
       this.notifyStateChange();
     } catch (error) {
       if (isCurrent()) {
@@ -530,8 +532,12 @@ export class CorePlayer {
     } finally {
       if (timeout) clearTimeout(timeout);
       controller.signal.removeEventListener("abort", onAbort);
-      controller.abort();
-      if (this.liveAttempt === controller) this.liveAttempt = undefined;
+      // Successful playback still needs this signal for its live HTTP transport.
+      // Stop/reconnect owns cancellation after the startup deadline is cleared.
+      if (!connected || !isCurrent()) {
+        controller.abort();
+        if (this.liveAttempt === controller) this.liveAttempt = undefined;
+      }
     }
   }
 

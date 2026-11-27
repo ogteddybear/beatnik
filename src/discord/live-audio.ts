@@ -1,5 +1,5 @@
 import type { CorePlayer } from "@/core/player";
-import { resolveLiveStreamUrl } from "@/providers/live/resolve-url";
+import { openLiveStream } from "@/providers/live/resolve-url";
 import {
   type AudioPlayer,
   AudioPlayerStatus,
@@ -8,6 +8,7 @@ import {
   createAudioResource,
   entersState,
 } from "@discordjs/voice";
+import type { Readable } from "node:stream";
 
 interface LiveAudio {
   audioPlayer: AudioPlayer;
@@ -22,33 +23,39 @@ interface LiveAudio {
 export function createLiveStreamHandler(
   audio: LiveAudio,
   createResource: (
-    url: string,
+    input: Readable,
     options: { inputType: StreamType; inlineVolume: boolean },
   ) => AudioResource = createAudioResource,
-  resolveUrl = resolveLiveStreamUrl,
+  openStream = openLiveStream,
 ): NonNullable<CorePlayer["onLiveStream"]> {
   return async (url, isCurrent, disconnected, attempt) => {
     audio.onStage?.("voice");
     await audio.ready();
     if (audio.isDestroyed() || !isCurrent() || attempt.signal.aborted) return;
     audio.onStage?.("redirect");
-    const resolvedUrl = await resolveUrl(url, { signal: attempt.signal });
-    if (audio.isDestroyed() || !isCurrent() || attempt.signal.aborted) return;
-    // Arbitrary MP3 URL -> prism FFmpeg PCM -> inline volume -> Opus.
-    const resource = createResource(resolvedUrl, {
-      inputType: StreamType.Arbitrary,
-      inlineVolume: true,
-    });
-    audio.setResource(resource);
-    resource.playStream.once("error", disconnected);
-    resource.playStream.once("end", disconnected);
-    attempt.onResourceCreated();
+    const { stream: input } = await openStream(url, { signal: attempt.signal });
+    if (audio.isDestroyed() || !isCurrent() || attempt.signal.aborted) {
+      input.destroy();
+      return;
+    }
+    let resource: AudioResource | undefined;
     try {
+      // Node MP3 bytes -> FFmpeg stdin/PCM -> inline volume -> Opus.
+      // Direct FFmpeg HTTP input crashes with SIGSEGV in the Fly image.
+      resource = createResource(input, {
+        inputType: StreamType.Arbitrary,
+        inlineVolume: true,
+      });
+      audio.setResource(resource);
+      resource.playStream.once("error", disconnected);
+      resource.playStream.once("end", disconnected);
+      attempt.onResourceCreated();
       audio.onStage?.("buffering");
       audio.audioPlayer.play(resource);
       await entersState(audio.audioPlayer, AudioPlayerStatus.Playing, attempt.signal);
     } catch (error) {
-      audio.resetResource(resource);
+      input.destroy();
+      if (resource) audio.resetResource(resource);
       throw error;
     }
     if (!isCurrent() || audio.isDestroyed()) audio.resetResource(resource);

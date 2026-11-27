@@ -1,4 +1,13 @@
+import { Readable } from "node:stream";
+import type { ReadableStream as NodeReadableStream } from "node:stream/web";
+
 import { LIVE_STATIONS, findLiveStation } from "./stations";
+
+interface LiveRequestOptions {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+  fetcher?: typeof fetch;
+}
 
 const stationHosts = new Set(Object.values(LIVE_STATIONS).map(({ url }) => new URL(url).hostname));
 const redirectStatuses = new Set([301, 302, 303, 307, 308]);
@@ -16,10 +25,7 @@ function validateDestination(url: URL) {
 }
 
 /** Resolve fresh on every attempt: the network may rotate its listener servers. */
-export async function resolveLiveStreamUrl(
-  stationUrl: string,
-  options: { signal?: AbortSignal; timeoutMs?: number; fetcher?: typeof fetch } = {},
-): Promise<string> {
+async function requestLiveStream(stationUrl: string, options: LiveRequestOptions) {
   if (!findLiveStation(stationUrl)) throw new Error("Unknown live station.");
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 5_000);
@@ -35,22 +41,54 @@ export async function resolveLiveStreamUrl(
       validateDestination(current);
       if (visited.has(current.href)) throw new Error("Live stream redirect loop.");
       visited.add(current.href);
-      // GET follows the same path as FFmpeg. Never consume an endless audio body.
+      // Resolve headers first; the caller either cancels or consumes the final body.
       const response = await fetcher(current.href, { method: "GET", redirect: "manual", signal });
       const location = response.headers.get("location");
-      await response.body?.cancel();
       signal.throwIfAborted();
       if (redirectStatuses.has(response.status)) {
+        await response.body?.cancel();
         if (!location) throw new Error("Live stream redirect has no destination.");
         current = new URL(location, current);
         continue;
       }
-      if (!response.ok) throw new Error(`Live stream returned HTTP ${response.status}.`);
-      return current.href;
+      if (!response.ok) {
+        await response.body?.cancel();
+        throw new Error(`Live stream returned HTTP ${response.status}.`);
+      }
+      return { url: current.href, response, close: () => controller.abort() };
     }
     throw new Error("Too many live stream redirects.");
+  } catch (error) {
+    controller.abort();
+    throw error;
   } finally {
     clearTimeout(timeout);
-    controller.abort();
   }
+}
+
+export async function resolveLiveStreamUrl(
+  stationUrl: string,
+  options: LiveRequestOptions = {},
+): Promise<string> {
+  const result = await requestLiveStream(stationUrl, options);
+  try {
+    await result.response.body?.cancel();
+    return result.url;
+  } finally {
+    result.close();
+  }
+}
+
+/** Node owns HTTP; FFmpeg receives MP3 bytes on stdin, never a network URL. */
+export async function openLiveStream(stationUrl: string, options: LiveRequestOptions = {}) {
+  const result = await requestLiveStream(stationUrl, options);
+  if (!result.response.body) {
+    result.close();
+    throw new Error("Live stream returned an empty body.");
+  }
+  const stream = Readable.fromWeb(result.response.body as NodeReadableStream<Uint8Array>);
+  // Guard the short handoff window before FFmpeg's pipeline installs listeners.
+  stream.on("error", () => undefined);
+  stream.once("close", result.close);
+  return { url: result.url, stream };
 }

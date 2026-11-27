@@ -1,10 +1,49 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { resolveLiveStreamUrl } from "./resolve-url";
+import { openLiveStream, resolveLiveStreamUrl } from "./resolve-url";
 import { LIVE_STATIONS } from "./stations";
 
 const stationUrl = LIVE_STATIONS.technobase.url;
+
+test("open live stream preserves the final audio body and closes it on teardown", async (ctx) => {
+  ctx.mock.timers.enable({ apis: ["setTimeout"] });
+  let cancellations = 0;
+  let requests = 0;
+  const result = await openLiveStream(stationUrl, {
+    timeoutMs: 20,
+    fetcher: async () => {
+      requests++;
+      if (requests === 1)
+        return new Response(null, {
+          status: 302,
+          headers: { location: "https://listener1.mp3.tb-group.fm/tb.mp3" },
+        });
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new Uint8Array([1, 2, 3]));
+          },
+          cancel() {
+            cancellations++;
+          },
+        }),
+        { headers: { "content-type": "audio/mpeg" } },
+      );
+    },
+  });
+  assert.equal(result.url, "https://listener1.mp3.tb-group.fm/tb.mp3");
+  assert.equal(requests, 2, "the resolved response is reused, not fetched a second time");
+  assert.equal(cancellations, 0);
+  ctx.mock.timers.tick(100);
+  assert.equal(result.stream.destroyed, false, "header deadline must not terminate playback");
+  const iterator = result.stream[Symbol.asyncIterator]();
+  const chunk = await iterator.next();
+  assert.deepEqual(Buffer.from(chunk.value), Buffer.from([1, 2, 3]));
+  result.stream.destroy();
+  await new Promise<void>((resolve) => result.stream.once("close", resolve));
+  assert.equal(cancellations, 1);
+});
 
 test("resolves HTTP to HTTPS and relative redirects, cancelling every response body", async () => {
   const requests: string[] = [];

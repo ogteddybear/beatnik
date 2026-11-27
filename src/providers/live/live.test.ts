@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { PassThrough } from "node:stream";
+import { PassThrough, type Readable } from "node:stream";
 import { test } from "node:test";
 import { setImmediate as flush } from "node:timers/promises";
 
@@ -63,8 +63,9 @@ test("live command and player lifecycle", async (t) => {
         const resource = createAudioResource(new PassThrough({ objectMode: true }), {
           inputType: StreamType.Opus,
         });
-        const createResource = ctx.mock.fn((url: string) => {
-          assert.equal(url, "https://listener1.mp3.tb-group.fm/tb.mp3");
+        const input = new PassThrough();
+        const createResource = ctx.mock.fn((stream: Readable) => {
+          assert.equal(stream, input, "FFmpeg must receive MP3 bytes, never a network URL");
           return resource;
         });
         const stop = ctx.mock.method(audioPlayer, "stop");
@@ -87,7 +88,7 @@ test("live command and player lifecycle", async (t) => {
             },
           },
           createResource,
-          async () => "https://listener1.mp3.tb-group.fm/tb.mp3",
+          async () => ({ url: "https://listener1.mp3.tb-group.fm/tb.mp3", stream: input }),
         );
         const pending = player.playLive(
           LIVE_STATIONS.technobase.url,
@@ -103,6 +104,7 @@ test("live command and player lifecycle", async (t) => {
           ctx.mock.timers.tick(1);
           await pending;
           assert.equal(resource.playStream.destroyed, true);
+          assert.equal(input.destroyed, true);
           assert.ok(stop.mock.calls.every((call) => call.arguments[0] === true));
           assert.equal(player.isPlaying, false);
         } finally {
@@ -214,19 +216,22 @@ test("live command and player lifecycle", async (t) => {
         const player = new CorePlayer("live-player", queue, []);
         let resets = 0;
         let stops = 0;
+        let transportSignal: AbortSignal | undefined;
         player.onResetAudio = () => {
           resets++;
         };
         player.onStop = () => {
           stops++;
         };
-        player.onLiveStream = async (url) => {
+        player.onLiveStream = async (url, _current, _disconnected, attempt) => {
           assert.equal(url, LIVE_STATIONS.technobase.url);
+          transportSignal = attempt.signal;
         };
         await player.playLive(LIVE_STATIONS.technobase.url, LIVE_STATIONS.technobase.name);
         assert.equal(player.isLive, true);
         assert.equal(player.isPlaying, true);
         assert.equal(player.isLoading, false);
+        assert.equal(transportSignal?.aborted, false, "successful startup must keep HTTP alive");
         assert.equal(queue.tracks.length, 0);
         assert.equal(queue.currentIndex, 0);
         assert.equal(player.getState()?.track.title, "TechnoBase.FM");
@@ -245,6 +250,7 @@ test("live command and player lifecycle", async (t) => {
         const stopButton = payload.components[0].components[0].data;
         assert.equal("custom_id" in stopButton ? stopButton.custom_id : undefined, "player:stop");
         await player.stop("listener");
+        assert.equal(transportSignal?.aborted, true, "stop must cancel the HTTP transport");
         assert.equal(player.isLive, false);
         assert.equal(player.getState(), null);
         assert.equal(stops, 1);
