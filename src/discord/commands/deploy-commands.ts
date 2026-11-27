@@ -25,7 +25,7 @@ import { builder as stop } from "./stop/builder";
 import { builder as storage } from "./storage/builder";
 import { builder as volume } from "./volume/builder";
 
-const COMMANDS_VERSION = "2.0.0";
+const COMMANDS_VERSION = "2.0.1";
 const versionFile = path.join(config.libraryPath, ".commands-version");
 
 async function shouldDeploy() {

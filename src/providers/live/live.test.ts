@@ -63,7 +63,10 @@ test("live command and player lifecycle", async (t) => {
         const resource = createAudioResource(new PassThrough({ objectMode: true }), {
           inputType: StreamType.Opus,
         });
-        const createResource = ctx.mock.fn(() => resource);
+        const createResource = ctx.mock.fn((url: string) => {
+          assert.equal(url, "https://listener1.mp3.tb-group.fm/tb.mp3");
+          return resource;
+        });
         const stop = ctx.mock.method(audioPlayer, "stop");
         let active: AudioResource | undefined;
         player.onResetAudio = () => {
@@ -84,6 +87,7 @@ test("live command and player lifecycle", async (t) => {
             },
           },
           createResource,
+          async () => "https://listener1.mp3.tb-group.fm/tb.mp3",
         );
         const pending = player.playLive(
           LIVE_STATIONS.technobase.url,
@@ -149,12 +153,17 @@ test("live command and player lifecycle", async (t) => {
         assert.equal(notices.length, 1);
       },
     );
-    await t.test("registry and command expose exactly the five approved stations", async () => {
+    await t.test("registry and command expose only the four active stations", async () => {
       const { builder } = await import("../../discord/commands/live/builder");
       const option = builder.toJSON().options?.[0];
       assert.ok(option);
       assert.equal(option?.name, "station");
-      assert.equal(Object.keys(LIVE_STATIONS).length, 5);
+      assert.deepEqual(Object.keys(LIVE_STATIONS), [
+        "technobase",
+        "housetime",
+        "hardbase",
+        "trancebase",
+      ]);
       assert.deepEqual(
         "choices" in option ? option.choices?.map((item) => item.value) : [],
         Object.keys(LIVE_STATIONS),

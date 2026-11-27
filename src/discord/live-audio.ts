@@ -1,4 +1,5 @@
 import type { CorePlayer } from "@/core/player";
+import { resolveLiveStreamUrl } from "@/providers/live/resolve-url";
 import {
   type AudioPlayer,
   AudioPlayerStatus,
@@ -23,12 +24,15 @@ export function createLiveStreamHandler(
     url: string,
     options: { inputType: StreamType; inlineVolume: boolean },
   ) => AudioResource = createAudioResource,
+  resolveUrl = resolveLiveStreamUrl,
 ): NonNullable<CorePlayer["onLiveStream"]> {
   return async (url, isCurrent, disconnected, attempt) => {
     await audio.ready();
     if (audio.isDestroyed() || !isCurrent() || attempt.signal.aborted) return;
+    const resolvedUrl = await resolveUrl(url, { signal: attempt.signal });
+    if (audio.isDestroyed() || !isCurrent() || attempt.signal.aborted) return;
     // Arbitrary MP3 URL -> prism FFmpeg PCM -> inline volume -> Opus.
-    const resource = createResource(url, {
+    const resource = createResource(resolvedUrl, {
       inputType: StreamType.Arbitrary,
       inlineVolume: true,
     });

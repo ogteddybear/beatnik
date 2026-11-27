@@ -26,11 +26,6 @@ export const LIVE_STATIONS = {
     url: "http://listen.trancebase.fm/tunein-mp3",
     genre: "Uplifting / Progressive Trance",
   },
-  coretime: {
-    name: "CoreTime.FM",
-    url: "http://listen.coretime.fm/tunein-mp3",
-    genre: "Hardcore / Speedcore",
-  },
 } as const satisfies Record<string, LiveStation>;
 
 export function findLiveStation(url: string): LiveStation | undefined {
