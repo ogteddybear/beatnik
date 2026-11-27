@@ -770,7 +770,11 @@ export function createWebServer(
           const current = controlSession(req.params.guildId);
           if (current?.player !== session.player || current?.voice !== session.voice) return;
           const { player } = session;
-          if (!player.isPlaying || (player.isLoading && action !== "stop")) return;
+          if (
+            (!player.isPlaying && !(player.isLive && action === "stop")) ||
+            (player.isLoading && action !== "stop")
+          )
+            return;
           switch (action) {
             case "pause":
               applied = player.isPaused || player.pause(id, username);

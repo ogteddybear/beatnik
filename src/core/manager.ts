@@ -28,7 +28,7 @@ export function saveSessionState(guildId: string) {
   const session = sessions.get(guildId);
   if (!session?.voiceChannelId) return;
   try {
-    if (!session.queue.nowPlaying) {
+    if (session.player.isLive || !session.queue.nowPlaying) {
       savedSessions.delete(guildId);
       return;
     }

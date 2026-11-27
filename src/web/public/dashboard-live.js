@@ -294,7 +294,9 @@
       const identity = document.createElement("div");
       const name = document.createElement("p");
       name.className = "small text-secondary mb-1";
-      name.textContent = `${guild.name} · ${state.status} · Loop: ${state.loopMode}`;
+      name.textContent = state.isLive
+        ? `${guild.name} · 🔴 LIVE · ${state.status === "loading" ? "Connecting…" : state.status}`
+        : `${guild.name} · ${state.status} · Loop: ${state.loopMode}`;
       const title = document.createElement("h3");
       title.className = "h5 mb-1";
       title.textContent = state.track.title;
@@ -323,7 +325,7 @@
       bar.className = "progress-bar bg-primary";
       bar.style.width = `${percent}%`;
       progress.append(bar);
-      card.append(position, progress);
+      if (!state.isLive) card.append(position, progress);
       const controls = document.createElement("div");
       controls.className = "d-flex gap-2 mt-3";
       const pendingToggle = pendingControls.get(guild.id);
@@ -340,6 +342,7 @@
         ["skip", "Skip", "skip-forward-fill"],
         ["stop", "Stop", "stop-fill"],
       ]) {
+        if (state.isLive && action !== "stop") continue;
         const button = document.createElement("button");
         button.type = "button";
         button.className = `btn btn-sm ${action === "stop" ? "btn-outline-danger" : "btn-outline-light"}`;
@@ -364,6 +367,7 @@
       card.append(controls);
       const save = document.createElement("button");
       save.type = "button";
+      save.hidden = !!state.isLive;
       save.dataset.saveQueue = "";
       save.className = "btn btn-sm btn-outline-light mt-2";
       save.textContent = pendingSaves.has(guild.id)

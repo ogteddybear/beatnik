@@ -1,4 +1,5 @@
 import type { Provider, ProviderTrack } from "@/providers";
+import { type LiveStation, findLiveStation } from "@/providers/live/stations";
 import { SpotifyPlaylistUnavailableError } from "@/providers/spotify/errors";
 import { log } from "@/shared";
 import type { Readable } from "node:stream";
@@ -19,6 +20,7 @@ import {
 } from "./resolvers";
 
 export interface PlayerState {
+  isLive?: boolean;
   status: "loading" | "paused" | "playing";
   track: { id: string; title: string; artist: string; thumbnail: string; durationSeconds: number };
   progressSeconds: number;
@@ -27,11 +29,17 @@ export interface PlayerState {
   nextTracks: PlayerState["track"][];
 }
 
+export interface LiveStreamAttempt {
+  signal: AbortSignal;
+  onResourceCreated: () => void;
+}
+
 export class CorePlayer {
   constructor(
     public readonly guildId: string,
     public readonly queue: Queue,
     private providers: Provider[],
+    private readonly liveConnectionTimeoutMs = 10_000,
   ) {
     this.volume = getGuildPlayerSettings(guildId).volume;
   }
@@ -39,6 +47,19 @@ export class CorePlayer {
   isPlaying = false;
   isPaused = false;
   isLoading = false;
+  isLive = false;
+  private liveStation?: LiveStation;
+  private liveReconnectTimer?: ReturnType<typeof setTimeout>;
+  private liveAttempt?: AbortController;
+  private liveAttempts = 0;
+  onResetAudio?: () => void;
+  onLiveUnavailable?: (stationName: string) => void;
+  onLiveStream?: (
+    url: string,
+    isCurrent: () => boolean,
+    disconnected: () => void,
+    attempt: LiveStreamAttempt,
+  ) => Promise<void>;
   private generation = 0;
   private startedAt = 0;
   private elapsed = 0;
@@ -104,6 +125,7 @@ export class CorePlayer {
     playNext = false,
     username?: string,
   ): QueuedTrack[] {
+    if (this.isLive) throw new Error("Stop the live stream with /stop before adding tracks.");
     if (willShuffle) tracks = shuffleArray(tracks);
     // Explicit playNext inserts after the current track; otherwise preserve FIFO by appending.
     const basis = playNext ? this.queue.currentIndex + 1 : this.queue.tracks.length;
@@ -118,6 +140,23 @@ export class CorePlayer {
   }
 
   getState(): PlayerState | null {
+    if (this.isLive && this.liveStation) {
+      return {
+        isLive: true,
+        status: this.isLoading ? "loading" : "playing",
+        track: {
+          id: this.liveStation.url,
+          title: this.liveStation.name,
+          artist: this.liveStation.genre,
+          thumbnail: "",
+          durationSeconds: 0,
+        },
+        progressSeconds: 0,
+        progressPercent: 0,
+        loopMode: "off",
+        nextTracks: [],
+      };
+    }
     const track = this.queue.nowPlaying;
     if (!track || !this.isPlaying) return null;
     const view = (item: ProviderTrack) => ({
@@ -144,6 +183,7 @@ export class CorePlayer {
   }
 
   pause(userId?: string, username?: string): boolean {
+    if (this.isLive) return false;
     if (!this.isPlaying || this.isLoading || this.isPaused || !this.onPause?.(true)) return false;
     this.elapsed += (Date.now() - this.startedAt) / 1000;
     this.isPaused = true;
@@ -162,6 +202,7 @@ export class CorePlayer {
   }
 
   toggleLoop(userId?: string, username?: string): LoopMode {
+    if (this.isLive) return this.queue.loopMode;
     const loopMode = this.queue.toggleLoop();
     this.logPlayerEvent({
       userId,
@@ -175,6 +216,7 @@ export class CorePlayer {
   }
 
   async play(attempted = new Set<number>()) {
+    if (this.isLive) throw new Error("Stop the live stream with /stop before playing tracks.");
     const generation = ++this.generation;
     const track = this.queue.nowPlaying;
     if (!track || attempted.has(this.queue.currentIndex)) {
@@ -299,6 +341,7 @@ export class CorePlayer {
   }
 
   async advance(naturalFinish = false, attempted = new Set<number>()) {
+    if (this.isLive) throw new Error("Cannot skip a live stream.");
     const last = this.queue.nowPlaying;
     this.queue.advance(naturalFinish);
     // Only successful natural completion starts radio; failures/removals/stops
@@ -339,12 +382,17 @@ export class CorePlayer {
   }
 
   async finish(failed = false) {
+    if (this.isLive) {
+      this.reconnectLive();
+      return;
+    }
     if (failed) this.failedTracks.add(this.queue.currentIndex);
     else this.failedTracks.clear();
     await this.next(!failed, new Set(this.failedTracks));
   }
 
   async skip(userId: string, idx?: number, username?: string) {
+    if (this.isLive) throw new Error("Cannot skip a live stream.");
     if (this.isLoading) return;
     const track = this.queue.nowPlaying;
     if (!track) return;
@@ -362,6 +410,7 @@ export class CorePlayer {
   }
 
   async jump(idx: number) {
+    if (this.isLive) throw new Error("Cannot skip a live stream.");
     this.failedTracks.clear();
     this.queue.currentIndex = idx;
     await this.play();
@@ -400,8 +449,119 @@ export class CorePlayer {
     return removed;
   }
 
+  /** Switch audio without invoking onStop, which tears down the voice session. */
+  async playLive(url: string, stationName: string) {
+    const station = findLiveStation(url);
+    if (!station || station.name !== stationName) throw new Error("Unknown live station.");
+    if (!this.onLiveStream) throw new Error("No voice session available for live playback.");
+    this.generation++;
+    this.clearLive();
+    this.isPlaying = false;
+    this.isLoading = true;
+    this.onResetAudio?.();
+    this.queue.tracks = [];
+    this.queue.currentIndex = 0;
+    this.queue.loopMode = "off";
+    this.failedTracks.clear();
+    this.restorePaused = false;
+    this.isPaused = false;
+    this.fromCache = null;
+    this.liveStation = station;
+    this.isLive = true;
+    this.notifyStateChange();
+    await this.connectLive();
+  }
+
+  private async connectLive() {
+    const station = this.liveStation;
+    if (!this.isLive || !station) return;
+    const generation = ++this.generation;
+    const isCurrent = () => this.isLive && generation === this.generation;
+    const controller = new AbortController();
+    this.liveAttempt = controller;
+    this.liveAttempts++;
+    this.isPlaying = false;
+    this.isLoading = true;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    let onAbort: () => void = () => undefined;
+    const cancelled = new Promise<never>((_resolve, reject) => {
+      onAbort = () => {
+        if (timeout) clearTimeout(timeout);
+        reject(new Error("Live connection timed out or was cancelled."));
+      };
+      controller.signal.addEventListener("abort", onAbort, { once: true });
+    });
+    try {
+      const onLiveStream = this.onLiveStream;
+      if (!onLiveStream) throw new Error("No voice session available for live playback.");
+      await Promise.race([
+        cancelled,
+        onLiveStream(
+          station.url,
+          isCurrent,
+          () => {
+            if (isCurrent()) this.reconnectLive();
+          },
+          {
+            signal: controller.signal,
+            onResourceCreated: () => {
+              if (!isCurrent() || controller.signal.aborted || timeout) return;
+              timeout = setTimeout(() => controller.abort(), this.liveConnectionTimeoutMs);
+              timeout.unref();
+            },
+          },
+        ),
+      ]);
+      if (!isCurrent()) return;
+      this.liveAttempts = 0;
+      this.isPlaying = true;
+      this.isLoading = false;
+      this.notifyStateChange();
+    } catch {
+      if (isCurrent()) this.reconnectLive();
+    } finally {
+      if (timeout) clearTimeout(timeout);
+      controller.signal.removeEventListener("abort", onAbort);
+      controller.abort();
+      if (this.liveAttempt === controller) this.liveAttempt = undefined;
+    }
+  }
+
+  private reconnectLive() {
+    if (!this.isLive || this.liveReconnectTimer) return;
+    if (this.liveAttempts >= 2) {
+      const stationName = this.liveStation?.name;
+      void this.stop();
+      if (stationName) this.onLiveUnavailable?.(stationName);
+      return;
+    }
+    // Invalidate callbacks from the failed resource before stopping it.
+    this.generation++;
+    this.liveAttempt?.abort();
+    this.isPlaying = false;
+    this.isLoading = true;
+    this.onResetAudio?.();
+    this.liveReconnectTimer = setTimeout(() => {
+      this.liveReconnectTimer = undefined;
+      void this.connectLive();
+    }, 3_000);
+    this.liveReconnectTimer.unref();
+    this.notifyStateChange();
+  }
+
+  private clearLive() {
+    this.liveAttempt?.abort();
+    this.liveAttempt = undefined;
+    this.liveAttempts = 0;
+    if (this.liveReconnectTimer) clearTimeout(this.liveReconnectTimer);
+    this.liveReconnectTimer = undefined;
+    this.isLive = false;
+    this.liveStation = undefined;
+  }
+
   async stop(userId: string | null = null, username?: string) {
     this.generation++;
+    this.clearLive();
     if (this.queue.tracks.length || this.isPlaying) {
       this.logPlayerEvent({
         userId,
@@ -422,6 +582,7 @@ export class CorePlayer {
     this.queue.loopMode = "off";
     this.failedTracks.clear();
     this.restorePaused = false;
+    this.onResetAudio?.();
     this.onPersist?.();
     this.onStop?.();
     publishGuildUpdate(this.guildId);
@@ -429,8 +590,10 @@ export class CorePlayer {
 
   suspend() {
     this.generation++;
+    this.clearLive();
     this.isPlaying = false;
     this.isLoading = false;
+    this.onResetAudio?.();
   }
 
   setVolume(percent: number, userId: string, username?: string) {

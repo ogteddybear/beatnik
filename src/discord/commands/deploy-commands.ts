@@ -12,6 +12,7 @@ import { builder as add } from "./library/add/builder";
 import { builder as load } from "./library/load/builder";
 import { builder as libraryRemove } from "./library/remove/builder";
 import { builder as update } from "./library/update/builder";
+import { builder as live } from "./live/builder";
 import { builder as lyrics } from "./lyrics/builder";
 import { builder as play } from "./play/builder";
 import { builder as queue } from "./queue/builder";
@@ -24,7 +25,7 @@ import { builder as stop } from "./stop/builder";
 import { builder as storage } from "./storage/builder";
 import { builder as volume } from "./volume/builder";
 
-const COMMANDS_VERSION = "1.9.0";
+const COMMANDS_VERSION = "2.0.0";
 const versionFile = path.join(config.libraryPath, ".commands-version");
 
 async function shouldDeploy() {
@@ -48,6 +49,7 @@ export async function deployCommands() {
     }
     const { token, clientId } = config.discord;
     const builders = [
+      live,
       autoplay,
       diagnostics,
       add,

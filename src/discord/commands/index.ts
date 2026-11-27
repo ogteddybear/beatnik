@@ -8,6 +8,7 @@ import * as add from "./library/add/command";
 import * as load from "./library/load/command";
 import * as libraryRemove from "./library/remove/command";
 import * as update from "./library/update/command";
+import * as live from "./live/command";
 import * as lyrics from "./lyrics/command";
 import * as play from "./play/command";
 import * as queue from "./queue/command";
@@ -32,6 +33,7 @@ export type CommandExecuter = (interaction: ChatInputCommandInteraction) => Prom
 type CommandList = Record<string, Command>;
 
 export const commandList: CommandList = {
+  live,
   autoplay,
   diagnostics,
   spotify,

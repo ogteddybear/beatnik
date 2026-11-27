@@ -14,6 +14,7 @@ import {
 import type { TextBasedChannel, VoiceBasedChannel } from "discord.js";
 
 import { createVoiceConnection } from "./connection";
+import { createLiveStreamHandler } from "./live-audio";
 import { deleteVoiceSession } from "./manager";
 import { NowPlayingPanel } from "./now-playing";
 
@@ -58,7 +59,7 @@ export class VoiceSession {
   constructor(
     voiceChannel: VoiceBasedChannel,
     textChannel: TextBasedChannel | null,
-    corePlayer: CorePlayer,
+    private readonly corePlayer: CorePlayer,
     actor?: { userId: string; username: string },
   ) {
     this.channelId = voiceChannel.id;
@@ -89,6 +90,35 @@ export class VoiceSession {
       this.resource?.volume?.setVolumeDecibels(this.normalizationDb);
       if (this.resource?.volume)
         this.resource.volume.setVolume((this.resource.volume.volume * percent) / 100);
+    };
+
+    corePlayer.onResetAudio = () => {
+      this.audioPlayer.stop(true);
+      this.resource?.playStream.destroy();
+      this.resource = undefined;
+    };
+    corePlayer.onLiveStream = createLiveStreamHandler({
+      audioPlayer: this.audioPlayer,
+      ready: () => entersState(this.connection, VoiceConnectionStatus.Ready, 10_000),
+      isDestroyed: () => this.destroyed,
+      setResource: (resource) => {
+        this.resource = resource;
+        this.normalizationDb = 0;
+        resource.volume?.setVolume(corePlayer.volume / 100);
+      },
+      resetResource: (resource) => {
+        if (this.resource === resource) corePlayer.onResetAudio?.();
+      },
+    });
+    corePlayer.onLiveUnavailable = (stationName) => {
+      if (this.textChannel?.isSendable()) {
+        void this.textChannel
+          .send({
+            content: `Cannot reach **${stationName}** right now. The station may be down. Try again later or use a different station.`,
+            allowedMentions: { parse: [] },
+          })
+          .catch(console.error);
+      }
     };
 
     corePlayer.onStream = async (track, inputStream, isCurrent, startPaused) => {
@@ -157,6 +187,11 @@ export class VoiceSession {
         void corePlayer.finish(this.trackFailed).catch(console.error);
     });
     this.audioPlayer.on("error", (err) => {
+      if (corePlayer.isLive) {
+        // A late error from an old resource must not restart a newer station.
+        if (err.resource === this.resource) void corePlayer.finish(true);
+        return;
+      }
       this.trackFailed = true;
       const track = corePlayer.queue.nowPlaying;
       if (track) {
@@ -185,9 +220,11 @@ export class VoiceSession {
   destroy() {
     if (this.destroyed) return;
     this.destroyed = true;
+    this.corePlayer.suspend();
     if (this.panelTimer) clearInterval(this.panelTimer);
     void this.panel?.close();
     this.audioPlayer.stop();
+    this.resource?.playStream.destroy();
     this.subscription?.unsubscribe();
     if (this.connection.state.status !== VoiceConnectionStatus.Destroyed) this.connection.destroy();
   }

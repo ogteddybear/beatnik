@@ -18,6 +18,28 @@ export function playbackTime(seconds: number): string {
 }
 
 export function nowPlayingPayload(state: PlayerState) {
+  if (state.isLive) {
+    return {
+      embeds: [
+        new EmbedBuilder()
+          .setColor("#0a203b")
+          .setAuthor({ name: state.status === "loading" ? "🔴 LIVE · Connecting…" : "🔴 LIVE" })
+          .setTitle(state.track.title.slice(0, 256))
+          .setDescription(
+            `${escapeMarkdown(state.track.artist)}\nUse \`/stop\` to end the broadcast.`,
+          ),
+      ],
+      components: [
+        new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId("player:stop")
+            .setLabel("Stop")
+            .setStyle(ButtonStyle.Danger),
+        ),
+      ],
+      allowedMentions: { parse: [] as [] },
+    };
+  }
   const filled = Math.max(0, Math.min(20, Math.round(state.progressPercent / 5)));
   const embed = new EmbedBuilder()
     .setColor("#0a203b")
@@ -75,6 +97,8 @@ export class NowPlayingPanel {
   private message?: PanelMessage;
   private pending = Promise.resolve();
   private closed = false;
+  private lastLiveEdit = 0;
+  private lastLiveStation?: string;
   constructor(
     private channel: PanelChannel,
     private player: CorePlayer,
@@ -90,7 +114,16 @@ export class NowPlayingPanel {
         if (this.closed) return;
         const state = this.player.getState();
         if (!state) return;
+        if (
+          state.isLive &&
+          this.message &&
+          this.lastLiveStation === state.track.id &&
+          Date.now() - this.lastLiveEdit < 60_000
+        )
+          return;
         const payload = nowPlayingPayload(state);
+        this.lastLiveEdit = state.isLive ? Date.now() : 0;
+        this.lastLiveStation = state.isLive ? state.track.id : undefined;
         if (this.message) {
           try {
             await this.message.edit(payload);

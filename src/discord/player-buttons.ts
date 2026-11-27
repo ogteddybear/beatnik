@@ -22,7 +22,7 @@ export async function handlePlayerButton(
   interaction: ButtonInteraction,
   lookup = getPlayerControlSession,
 ): Promise<void> {
-  if (!/^player:(pause|skip|loop)$/.test(interaction.customId)) return;
+  if (!/^player:(pause|skip|loop|stop)$/.test(interaction.customId)) return;
   const session = interaction.guildId ? lookup(interaction.guildId) : undefined;
   if (
     !interaction.guild ||
@@ -51,14 +51,18 @@ export async function handlePlayerButton(
       const { player, voice } = session;
       if (
         !voice.isCurrentMessage(interaction.message.id) ||
-        !player.isPlaying ||
-        player.isLoading
+        (!player.isPlaying && !(player.isLive && interaction.customId === "player:stop")) ||
+        (player.isLoading && interaction.customId !== "player:stop")
       ) {
         await interaction.editReply("The player is changing tracks. Please try again.");
         return;
       }
       const { id, username } = interaction.user;
       switch (interaction.customId) {
+        case "player:stop":
+          await player.stop(id, username);
+          await interaction.editReply("Stopped.");
+          break;
         case "player:pause": {
           const changed = player.isPaused
             ? player.resume(id, username)
