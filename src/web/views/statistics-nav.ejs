@@ -1,0 +1,4 @@
+<nav class="nav nav-underline statistics-navigation mb-4" aria-label="Statistics views">
+  <a class="nav-link <%= tab === 'overview' ? 'active' : '' %>" href="<%= baseUrl %>" <%- tab === 'overview' ? 'aria-current="page"' : '' %>>Overview</a>
+  <a class="nav-link <%= tab === 'events' ? 'active' : '' %>" href="<%= baseUrl %>?tab=events" <%- tab === 'events' ? 'aria-current="page"' : '' %>>Event History</a>
+</nav>

@@ -365,6 +365,25 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
         /\/dashboard\/guilds\/member/,
       );
       assert.equal((await originalFetch(`${origin}/api/dashboard/statistics`)).status, 401);
+      assert.equal((await originalFetch(`${origin}/api/admin/statistics`)).status, 401);
+      assert.equal((await request("/api/admin/statistics", memberCookie)).status, 403);
+      assert.equal((await request("/admin/statistics", memberCookie)).status, 302);
+      const aggregate = await request("/api/admin/statistics", ownerCookie);
+      assert.equal(aggregate.status, 200);
+      assert.equal(aggregate.headers.get("cache-control"), "private, no-store");
+      const aggregateBody = await aggregate.json();
+      assert.equal(aggregateBody.days.length, 30);
+      assert.equal(aggregateBody.timezone, "UTC");
+      const statisticsPage = await request("/admin/statistics", ownerCookie);
+      assert.equal(statisticsPage.status, 200);
+      const statisticsHtml = await statisticsPage.text();
+      assert.match(statisticsHtml, /data-statistics-url="\/api\/admin\/statistics"/);
+      assert.doesNotMatch(statisticsHtml, /id="event-search-results"/);
+      const eventsPage = await request("/admin/statistics?tab=events", ownerCookie);
+      assert.equal(eventsPage.status, 200);
+      const eventsHtml = await eventsPage.text();
+      assert.match(eventsHtml, /id="event-search-results"/);
+      assert.doesNotMatch(eventsHtml, /id="statistics"/);
       assert.equal(
         (await request("/api/admin/guilds/managed/statistics", memberCookie)).status,
         403,
@@ -425,6 +444,15 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
         ["managed", "member", "admin"],
       );
       assert.equal((await request("/admin/guild/managed", ownerCookie)).status, 200);
+      const serverOverviewHtml = await (await request("/admin/guild/managed", ownerCookie)).text();
+      assert.match(serverOverviewHtml, /data-statistics-tab="overview"/);
+      assert.doesNotMatch(serverOverviewHtml, /id="activity-rows"/);
+      const serverEventsHtml = await (
+        await request("/admin/guild/managed?tab=events", ownerCookie)
+      ).text();
+      assert.match(serverEventsHtml, /data-statistics-tab="events"/);
+      assert.match(serverEventsHtml, /id="activity-rows"/);
+      assert.doesNotMatch(serverEventsHtml, /id="statistics"/);
       assert.equal((await request("/api/admin/guilds/missing/events", ownerCookie)).status, 404);
       const updateQuota = (body: unknown, cookie = ownerCookie, guild = "managed", header = true) =>
         originalFetch(`${origin}/api/admin/guilds/${guild}/settings`, {

@@ -8,6 +8,8 @@
   }
   const mode = document.body.dataset.dashboard;
   if (!mode) return;
+  // Overview uses only the aggregate statistics endpoint; history is opt-in.
+  if (mode === "detail" && document.body.dataset.statisticsTab === "overview") return;
   const status = document.getElementById("live-status");
   const labels = {
     plays: "Plays",

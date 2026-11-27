@@ -1,19 +1,27 @@
-<nav class="navbar navbar-expand" aria-label="Main navigation">
+<nav class="navbar navbar-expand-lg" aria-label="Main navigation">
   <div class="container">
     <a href="/dashboard" class="navbar-brand fw-bold"><span class="text-primary" aria-hidden="true">♫</span> Sashimi</a>
-    <div class="nav-actions">
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#primary-navigation" aria-controls="primary-navigation" aria-expanded="false" aria-label="Toggle navigation"><span class="navbar-toggler-icon"></span></button>
+    <div class="collapse navbar-collapse" id="primary-navigation">
+      <div class="navbar-nav">
+        <a class="nav-link" href="/servers" <%- ['servers', 'dashboard', 'detail'].includes(active) ? 'aria-current="page"' : '' %>>Servers</a>
+        <a class="nav-link" href="/playlists" <%- active === 'playlists' ? 'aria-current="page"' : '' %>>Playlists</a>
+        <a class="nav-link" href="/recap" <%- active === 'recap' ? 'aria-current="page"' : '' %>>Recap</a>
+        <a class="nav-link" href="/stats" <%- active === 'stats' ? 'aria-current="page"' : '' %>>Stats</a>
+      </div>
+    </div>
+    <div class="nav-actions account-menu dropdown">
+      <button class="account-trigger dropdown-toggle" id="account-menu-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Account menu for <%= username %>">
       <% if (avatarUrl) { %><img class="avatar" src="<%= typeof proxyImageUrl === 'function' ? proxyImageUrl(avatarUrl) : avatarUrl %>" alt="" width="36" height="36" />
       <% } else { %><span class="avatar-placeholder" aria-hidden="true">♫</span><% } %>
       <span class="nav-username d-none d-sm-inline"><%= username %></span>
-      <% if (isAdmin) { %>
-        <a class="btn btn-outline-light btn-sm" href="/admin" <%- active === 'admin' ? 'aria-current="page"' : '' %>>Admin</a>
-      <% } %>
-      <a class="btn btn-outline-light btn-sm" href="/playlists" <%- active === 'playlists' ? 'aria-current="page"' : '' %>>Playlists</a>
-      <a class="btn btn-outline-light btn-sm" href="/servers" <%- active === 'servers' ? 'aria-current="page"' : '' %>>Servers</a>
-      <a class="btn btn-outline-light btn-sm" href="/recap" <%- active === 'recap' ? 'aria-current="page"' : '' %>>Recap</a>
-      <a class="btn btn-outline-light btn-sm" href="/stats">Stats</a>
-      <button class="btn btn-outline-light btn-sm" type="button" data-theme-toggle>Switch theme</button>
-      <a class="btn btn-outline-light btn-sm" href="/logout">Log out</a>
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="account-menu-toggle">
+        <% if (isAdmin) { %><li><a class="dropdown-item" href="/admin" <%- active === 'admin' ? 'aria-current="page"' : '' %>>Admin</a></li><% } %>
+        <li><button class="dropdown-item" type="button" data-theme-toggle>Switch theme</button></li>
+        <li><hr class="dropdown-divider" /></li>
+        <li><a class="dropdown-item text-danger" href="/logout">Log out</a></li>
+      </ul>
     </div>
   </div>
 </nav>

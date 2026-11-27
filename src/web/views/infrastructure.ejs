@@ -1,5 +1,5 @@
 <section class="card dashboard-card p-4 mb-4" id="infrastructure-health" aria-labelledby="infrastructure-heading">
-  <h2 class="h4 mb-3" id="infrastructure-heading">Infrastructure Health</h2>
+  <h2 class="h4 mb-3" id="infrastructure-heading">System health</h2>
   <div class="row g-4">
     <div class="col-12 col-sm-6 col-xl-3">
       <h3 class="h6 text-secondary">Uptime</h3>
@@ -13,10 +13,10 @@
       <h3 class="h6 text-secondary"><%= label %></h3>
       <p class="mb-1 <%= percentage == null ? 'text-secondary' : '' %>" data-infra-value="<%= key %>"><%= metric?.text ?? 'Unavailable' %></p>
       <div data-infra-meter="<%= key %>" <%= percentage == null ? 'hidden' : '' %>>
-        <div class="progress mt-2" role="progressbar" aria-label="<%= label %>"
+        <div class="progress progress-thin mt-2" role="progressbar" aria-label="<%= label %>"
              aria-valuemin="0" aria-valuemax="100"
              aria-valuenow="<%= Math.max(0, Math.min(100, percentage ?? 0)) %>"
-             aria-valuetext="<%= Math.round(percentage ?? 0) %>%" style="height: 6px;">
+             aria-valuetext="<%= Math.round(percentage ?? 0) %>%">
           <div class="progress-bar <%= (percentage ?? 0) > 90 ? 'bg-danger' : 'bg-primary' %>"
                style="width: <%= Math.max(0, Math.min(100, percentage ?? 0)) %>%"></div>
         </div>
@@ -24,10 +24,9 @@
     </div>
     <% } %>
   </div>
-  <p class="small text-secondary mt-3 mb-0">CPU is a load-average estimate, not measured utilization. Load 1/5/15m:
+  <details class="small text-body-secondary mt-3"><summary>System details</summary><p class="mt-2 mb-0">CPU is a load-average estimate, not utilization. Load 1/5/15m:
     <span data-infra-load><%= infrastructure?.loadAverage ?? 'Unavailable' %></span> ·
     <span data-infra-cores><%= infrastructure?.coreCount ?? '—' %></span> cores.
     Volume source: <span data-infra-source><%= infrastructure?.volumeSource ?? 'Unavailable' %></span>.
-    Refreshes every 15 seconds while visible.
-  </p>
+  </p></details>
 </section>

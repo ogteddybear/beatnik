@@ -20,17 +20,17 @@
             <div class="form-check mb-3"><input id="autoplay" type="checkbox" class="form-check-input" /><label for="autoplay" class="form-check-label">Autoplay / radio mode</label></div>
             <label for="dj-role" class="form-label">DJ role ID (optional)</label>
             <input id="dj-role" class="form-control mb-3" inputmode="numeric" pattern="[0-9]{17,20}" />
-            <p class="small text-secondary">The DJ role may toggle /autoplay. Web changes still require Manage Server or bot-owner access. Volume changes also apply to current playback.</p>
+            <p class="small text-secondary">The DJ role can toggle autoplay. Volume changes apply immediately.</p>
             <button class="btn btn-primary" type="submit">Save settings</button>
           </fieldset>
         </form>
-        <p id="settings-status" role="status" aria-live="polite">Loading settings…</p>
+        <p id="settings-status" class="status-text" role="status" aria-live="polite">Loading settings…</p>
       </section>
       <section class="panel page-section" aria-labelledby="queue-heading">
-        <h2 id="queue-heading" class="h4">Full queue</h2>
-        <p class="text-secondary">Refreshes every 15 seconds. Drag a handle or use ↑/↓ to reorder. Positions are one-based. The current track keeps playing when reordered.</p>
-        <button id="refresh-queue" class="btn btn-outline-light mb-3" type="button">Refresh queue</button>
-        <p id="queue-status" role="status" aria-live="polite">Loading queue…</p>
+        <h2 id="queue-heading" class="h4">Queue</h2>
+        <p class="small text-body-secondary">Drag or use ↑/↓ to reorder.</p>
+        <button id="refresh-queue" class="btn btn-outline-secondary mb-3" type="button">Refresh queue</button>
+        <p id="queue-status" class="status-text" role="status" aria-live="polite">Loading queue…</p>
         <ol id="full-queue" class="list-group"></ol>
       </section>
     </main>

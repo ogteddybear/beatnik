@@ -9,6 +9,7 @@ test("owner quota form saves JSON, refreshes progress and preserves unsaved edit
     username: "Owner",
     avatarUrl: "",
     isAdmin: true,
+    statisticsTab: "events",
     guildId: "123",
     guildName: "Server",
   });

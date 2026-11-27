@@ -6,13 +6,162 @@
   let charts = [];
   let busy = false;
   let lastData;
+  let breakdown = { labels: [], counts: [] };
   const sourceSelect = document.getElementById("statistics-source");
   function palette() {
     const style = getComputedStyle(document.documentElement);
     return {
-      text: style.getPropertyValue("--text-secondary").trim() || "#aab7d1",
-      grid: style.getPropertyValue("--border-color").trim() || "#354460",
+      text: style.getPropertyValue("--text-secondary").trim(),
+      grid: style.getPropertyValue("--border-color").trim(),
+      primary: style.getPropertyValue("--brand-primary").trim(),
+      accent: style.getPropertyValue("--accent").trim(),
+      success: style.getPropertyValue("--success").trim(),
+      warning: style.getPropertyValue("--warning").trim(),
+      error: style.getPropertyValue("--error").trim(),
+      foreground: style.getPropertyValue("--text-primary").trim(),
+      surface: style.getPropertyValue("--surface-section").trim(),
+      raised: style.getPropertyValue("--surface-raised").trim(),
+      font: style.getPropertyValue("--font-body").trim(),
     };
+  }
+  function translucent(color, opacity) {
+    if (/^#[\da-f]{6}$/i.test(color)) {
+      const channels = color
+        .slice(1)
+        .match(/../g)
+        .map((hex) => parseInt(hex, 16));
+      return `rgba(${channels.join(", ")}, ${opacity})`;
+    }
+    return `color-mix(in srgb, ${color} ${opacity * 100}%, transparent)`;
+  }
+  function seriesColors(colors) {
+    return [colors.primary, colors.success, colors.warning, colors.accent, colors.error];
+  }
+  function gradientFill(token) {
+    const color = palette()[token];
+    let gradient, previousTop, previousBottom;
+    return ({ chart: instance }) => {
+      if (!instance.chartArea) return translucent(color, 0.08);
+      const { top, bottom } = instance.chartArea;
+      if (!gradient || top !== previousTop || bottom !== previousBottom) {
+        gradient = instance.ctx.createLinearGradient(0, top, 0, bottom);
+        gradient.addColorStop(0, translucent(color, 0.22));
+        gradient.addColorStop(1, translucent(color, 0.01));
+        previousTop = top;
+        previousBottom = bottom;
+      }
+      return gradient;
+    };
+  }
+  function renderLegend() {
+    const legend = document.getElementById("distribution-legend");
+    if (!legend) return;
+    const colors = seriesColors(palette());
+    const total = breakdown.counts.reduce((sum, value) => sum + value, 0);
+    legend.replaceChildren();
+    breakdown.labels.forEach((label, index) => {
+      const item = document.createElement("li");
+      const name = document.createElement("span");
+      name.className = "statistics-legend-label";
+      const swatch = document.createElement("span");
+      swatch.className = "statistics-legend-swatch";
+      swatch.style.backgroundColor = colors[index % colors.length];
+      swatch.setAttribute("aria-hidden", "true");
+      name.append(swatch, document.createTextNode(label));
+      const value = document.createElement("span");
+      value.className = "tabular-nums text-body-secondary text-nowrap";
+      const count = breakdown.counts[index];
+      value.textContent = `${count.toLocaleString()} · ${total ? ((count / total) * 100).toFixed(1) : "0"}%`;
+      item.append(name, value);
+      legend.append(item);
+    });
+  }
+  function rankedList(id, entries) {
+    const list = document.getElementById(id);
+    list.replaceChildren();
+    entries.forEach((entry, index) => {
+      const row = document.createElement("li");
+      row.className = "list-group-item d-flex justify-content-between align-items-center gap-2";
+      const identity = document.createElement("div");
+      identity.className = "statistics-ranked-identity d-flex align-items-center gap-3";
+      const rank = document.createElement("span");
+      rank.className = "badge statistics-rank tabular-nums";
+      rank.textContent = index + 1;
+      const title = document.createElement("div");
+      title.className = "statistics-ranked-title";
+      const name = document.createElement("span");
+      name.className = "text-body";
+      name.textContent = entry.title;
+      title.append(name);
+      if (entry.subtitle) {
+        const subtitle = document.createElement("small");
+        subtitle.className = "d-block text-body-secondary mt-1";
+        subtitle.textContent = entry.subtitle;
+        title.append(subtitle);
+      }
+      identity.append(rank, title);
+      const count = document.createElement("span");
+      count.className = "badge statistics-count tabular-nums text-nowrap";
+      count.textContent = entry.count.toLocaleString();
+      count.setAttribute("aria-label", `${entry.count} ${entry.unit}`);
+      row.append(identity, count);
+      list.append(row);
+    });
+    if (!entries.length) {
+      const empty = document.createElement("li");
+      empty.className = "list-group-item small text-body-secondary py-3";
+      empty.textContent = "No activity recorded in this period.";
+      list.append(empty);
+    }
+  }
+  function summaryMetrics(labels, counts) {
+    const summary = document.getElementById("distribution-data");
+    summary.replaceChildren();
+    labels.forEach((label, index) => {
+      const column = document.createElement("div");
+      column.className = "col";
+      const box = document.createElement("div");
+      box.className = "statistics-summary-metric h-100";
+      const title = document.createElement("p");
+      title.className = "small text-body-secondary text-uppercase fw-semibold mb-1";
+      title.textContent = label;
+      const value = document.createElement("p");
+      value.className = "fs-4 fw-semibold tabular-nums mb-0";
+      value.textContent = counts[index].toLocaleString();
+      box.append(title, value);
+      column.append(box);
+      summary.append(column);
+    });
+  }
+  function externalTooltip({ chart: instance, tooltip }) {
+    const parent = instance.canvas.parentElement;
+    let element = parent.querySelector(".statistics-tooltip");
+    if (!element) {
+      element = document.createElement("div");
+      element.className = "statistics-tooltip tabular-nums";
+      element.id = `${instance.canvas.id}-tooltip`;
+      element.setAttribute("role", "tooltip");
+      instance.canvas.setAttribute("aria-describedby", element.id);
+      parent.append(element);
+    }
+    element.hidden = !tooltip.opacity;
+    if (element.hidden) return;
+    element.replaceChildren();
+    for (const title of tooltip.title || []) {
+      const heading = document.createElement("strong");
+      heading.className = "d-block fw-semibold mb-1";
+      heading.textContent = title;
+      element.append(heading);
+    }
+    for (const body of tooltip.body || []) {
+      for (const line of body.lines) {
+        const value = document.createElement("div");
+        value.textContent = line;
+        element.append(value);
+      }
+    }
+    element.style.left = `${Math.max(8, Math.min(tooltip.caretX + 12, parent.clientWidth - element.offsetWidth - 8))}px`;
+    element.style.top = `${Math.max(8, Math.min(tooltip.caretY + 12, parent.clientHeight - element.offsetHeight - 8))}px`;
   }
   function chart(id, type, labels, datasets, extra = {}) {
     const colors = palette();
@@ -22,9 +171,38 @@
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        animation: window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches
+          ? false
+          : { duration: 180 },
         indexAxis: type === "bar" ? "y" : "x",
-        plugins: { legend: { labels: { color: colors.text } } },
-        ...(type !== "pie"
+        font: { family: colors.font },
+        ...(type === "doughnut" ? { cutout: "68%" } : {}),
+        plugins: {
+          legend: {
+            display: type === "line" && datasets.length > 1,
+            position: "bottom",
+            labels: { color: colors.text, usePointStyle: true, boxWidth: 8, padding: 16 },
+          },
+          tooltip: {
+            enabled: false,
+            external: externalTooltip,
+            backgroundColor: colors.raised,
+            titleColor: colors.foreground,
+            bodyColor: colors.foreground,
+            borderColor: colors.grid,
+            borderWidth: 1,
+            callbacks: {
+              label(context) {
+                const value = Number(context.raw) || 0;
+                if (type !== "doughnut")
+                  return `${context.dataset.label}: ${value.toLocaleString()}`;
+                const total = context.dataset.data.reduce((sum, count) => sum + count, 0);
+                return `${context.label}: ${value.toLocaleString()} (${total ? ((value / total) * 100).toFixed(1) : "0"}%)`;
+              },
+            },
+          },
+        },
+        ...(type !== "doughnut"
           ? {
               scales: {
                 x: {
@@ -42,7 +220,12 @@
                         }
                       : {}),
                   },
-                  grid: { color: colors.grid },
+                  border: { display: false, dash: [3, 5] },
+                  grid: {
+                    color: translucent(colors.grid, 0.35),
+                    drawTicks: false,
+                    display: type === "bar",
+                  },
                 },
                 y: {
                   beginAtZero: true,
@@ -61,7 +244,8 @@
                         }
                       : {}),
                   },
-                  grid: { color: colors.grid },
+                  border: { display: false, dash: [3, 5] },
+                  grid: { color: translucent(colors.grid, 0.35), drawTicks: false },
                 },
               },
             }
@@ -72,6 +256,7 @@
   }
   function render(data) {
     const source = sourceSelect?.value || "queue";
+    const colors = palette();
     const radio = data.radio || {
       days: data.days.map((day) => ({
         day: day.day,
@@ -87,6 +272,37 @@
       totals: { songsObserved: 0, sessions: 0, connectedSeconds: 0, errors: 0, reconnects: 0 },
     };
     const radioByDay = new Map(radio.days.map((day) => [day.day, day]));
+    const queueErrors = data.days.reduce((sum, day) => sum + (day.errors || 0), 0);
+    const metrics =
+      source === "radio"
+        ? [
+            ["Songs tracked", radio.totals.songsObserved],
+            ["Sessions", radio.totals.sessions],
+            ["Connected minutes", Math.round(radio.totals.connectedSeconds / 60)],
+            ["Errors", radio.totals.errors],
+          ]
+        : source === "all"
+          ? [
+              ["Queued plays", data.distribution.plays],
+              ["Radio songs", radio.totals.songsObserved],
+              ["Radio sessions", radio.totals.sessions],
+              ["Errors", queueErrors + radio.totals.errors],
+            ]
+          : [
+              ["Plays", data.distribution.plays],
+              ["Commands", data.distribution.commands],
+              ["Skips", data.distribution.skips],
+              ["Errors", queueErrors],
+            ];
+    metrics.forEach(([label, value], index) => {
+      const heading = root.querySelector(`[data-statistic-label="${index}"]`);
+      const metric = root.querySelector(`[data-statistic-value="${index}"]`);
+      if (heading) heading.textContent = label;
+      if (metric) {
+        metric.classList.remove("placeholder-glow");
+        metric.textContent = Number(value || 0).toLocaleString();
+      }
+    });
     const columns =
       source === "radio"
         ? ["Day", "Songs observed", "Sessions", "Connected minutes", "Errors", "Reconnects"]
@@ -95,9 +311,10 @@
           : ["Day", "Plays", "Skips", "Errors", "Commands"];
     const header = document.getElementById("statistics-columns");
     header.replaceChildren();
-    for (const label of columns) {
+    for (const [index, label] of columns.entries()) {
       const cell = document.createElement("th");
       cell.scope = "col";
+      cell.className = index === 0 ? "text-nowrap" : "text-end";
       cell.textContent = label;
       header.append(cell);
     }
@@ -125,8 +342,9 @@
             ? [day.day, day.plays, live?.songsObserved || 0, day.errors, live?.errors || 0]
             : [day.day, day.plays, day.skips, day.errors, day.commands];
       const row = document.createElement("tr");
-      for (const value of values) {
+      for (const [index, value] of values.entries()) {
         const cell = document.createElement("td");
+        cell.className = index === 0 ? "text-nowrap" : "text-end";
         cell.textContent = value;
         row.append(cell);
       }
@@ -136,12 +354,14 @@
       source === "queue"
         ? data.topTracks.map((track) => ({
             label: track.title,
+            title: track.title,
             count: track.requests,
             unit: "requests",
           }))
         : source === "radio"
           ? radio.topTracks.map((track) => ({
               label: `${track.title} on ${track.station}`,
+              title: track.title,
               station: track.station,
               count: track.observations,
               unit: "songs tracked",
@@ -149,12 +369,15 @@
           : [
               ...(data.topPlays || []).map((track) => ({
                 label: `${track.title} · Queue`,
+                title: track.title,
+                subtitle: "Queue",
                 chartLabel: `Queue: ${track.title}`,
                 count: track.plays,
                 unit: "queued plays",
               })),
               ...radio.topTracks.map((track) => ({
                 label: `${track.title} on ${track.station}`,
+                title: track.title,
                 station: track.station,
                 count: track.observations,
                 unit: "songs tracked",
@@ -162,39 +385,34 @@
             ]
               .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
               .slice(0, 10);
-    const top = document.getElementById("top-tracks-data");
-    top.replaceChildren();
-    for (const track of tracks) {
-      const item = document.createElement("li");
-      item.textContent = `${track.label}: ${track.count} ${track.unit}`;
-      top.append(item);
-    }
+    rankedList(
+      "top-tracks-data",
+      tracks.map((track) => ({
+        ...track,
+        subtitle: track.station ? ` on ${track.station}` : track.subtitle,
+      })),
+    );
     document.getElementById("radio-statistics-details").hidden = source === "queue";
     document.getElementById("radio-statistics-breakdown").hidden = source === "queue";
     document.getElementById("radio-statistics-summary").textContent =
       `${radio.totals.songsObserved} songs tracked · ${radio.totals.sessions} sessions · ${Math.round(radio.totals.connectedSeconds / 60)} min on air`;
-    for (const [id, labels] of [
-      [
-        "radio-stations-data",
-        radio.stations.map(
-          (station) => `${station.station}: ${station.songsObserved} songs tracked`,
-        ),
-      ],
-      [
-        "radio-artists-data",
-        radio.topArtists.map(
-          (artist) => `${artist.artist} on ${artist.station}: ${artist.observations} songs tracked`,
-        ),
-      ],
-    ]) {
-      const list = document.getElementById(id);
-      list.replaceChildren();
-      for (const label of labels.length ? labels : ["No radio activity recorded in this period."]) {
-        const item = document.createElement("li");
-        item.textContent = label;
-        list.append(item);
-      }
-    }
+    rankedList(
+      "radio-stations-data",
+      radio.stations.map((station) => ({
+        title: station.station,
+        count: station.songsObserved,
+        unit: "songs tracked",
+      })),
+    );
+    rankedList(
+      "radio-artists-data",
+      radio.topArtists.map((artist) => ({
+        title: artist.artist,
+        subtitle: ` on ${artist.station}`,
+        count: artist.observations,
+        unit: "songs tracked",
+      })),
+    );
     const headings =
       source === "queue"
         ? ["Plays over time", "Top 10 requested tracks", "Commands / plays / skips"]
@@ -207,6 +425,7 @@
         .getElementById(`${name}-chart`)
         .setAttribute("aria-label", `${headings[index]}; values are in the data below`);
     });
+    document.getElementById("statistics-track-list-heading").textContent = headings[1];
     const { commands, plays, skips } = data.distribution;
     const labels =
       source === "queue"
@@ -220,9 +439,10 @@
         : source === "radio"
           ? radio.stations.map((station) => station.songsObserved)
           : [plays, radio.totals.songsObserved];
-    document.getElementById("distribution-data").textContent = labels
-      .map((label, index) => `${label}: ${counts[index]}`)
-      .join(" · ");
+    summaryMetrics(labels, counts);
+    breakdown = { labels, counts };
+    renderLegend();
+    root.querySelectorAll(".statistics-tooltip").forEach((element) => element.remove());
     charts.forEach((instance) => instance.destroy());
     charts = [];
     if (!window.Chart) {
@@ -235,15 +455,25 @@
       datasets.push({
         label: source === "queue" ? "Plays" : "Queued plays",
         data: data.days.map((day) => day.plays),
-        borderColor: "#5c9dff",
-        backgroundColor: "#5c9dff",
+        borderColor: colors.primary,
+        backgroundColor: gradientFill("primary"),
+        tension: 0.35,
+        fill: true,
+        borderWidth: 2,
+        pointRadius: 2,
+        pointHoverRadius: 4,
       });
     if (source !== "queue")
       datasets.push({
         label: "Radio songs",
         data: data.days.map((day) => radioByDay.get(day.day)?.songsObserved || 0),
-        borderColor: "#35b995",
-        backgroundColor: "#35b995",
+        borderColor: colors.success,
+        backgroundColor: gradientFill("success"),
+        tension: 0.35,
+        fill: true,
+        borderWidth: 2,
+        pointRadius: 2,
+        pointHoverRadius: 4,
       });
     charts.push(
       chart(
@@ -268,16 +498,23 @@
                   : "Queued plays / radio songs",
             stations: tracks.map((track) => track.station),
             data: tracks.map((track) => track.count),
-            backgroundColor: "#5c9dff",
+            backgroundColor: colors.primary,
+            borderRadius: 6,
+            borderSkipped: false,
+            maxBarThickness: 28,
           },
         ],
       ),
     );
     charts.push(
-      chart("distribution-chart", "pie", labels, [
+      chart("distribution-chart", "doughnut", labels, [
         {
           data: counts,
-          backgroundColor: ["#5c9dff", "#35b995", "#e4ad47", "#b085ef", "#e07d8d"],
+          backgroundColor: seriesColors(colors),
+          borderColor: colors.surface,
+          borderWidth: 2,
+          borderRadius: 4,
+          hoverOffset: 4,
         },
       ]),
     );
@@ -290,6 +527,7 @@
   async function load() {
     if (busy) return;
     busy = true;
+    root.setAttribute("aria-busy", "true");
     refresh.disabled = true;
     status.textContent = "Loading statistics…";
     try {
@@ -306,8 +544,13 @@
       render(data);
     } catch (error) {
       status.textContent = error.message;
+      root.querySelectorAll("[data-statistic-value].placeholder-glow").forEach((metric) => {
+        metric.classList.remove("placeholder-glow");
+        metric.textContent = "—";
+      });
     } finally {
       busy = false;
+      root.setAttribute("aria-busy", "false");
       refresh.disabled = false;
     }
   }
@@ -317,11 +560,35 @@
   });
   document.addEventListener("sashimi:theme", () => {
     const colors = palette();
-    for (const instance of charts) {
+    renderLegend();
+    root.querySelectorAll(".statistics-tooltip").forEach((element) => {
+      element.hidden = true;
+    });
+    for (const [index, instance] of charts.entries()) {
+      for (const dataset of instance.data?.datasets || []) {
+        if (index === 2) {
+          dataset.backgroundColor = seriesColors(colors);
+          dataset.borderColor = colors.surface;
+        } else if (index === 0) {
+          const token = dataset.label === "Radio songs" ? "success" : "primary";
+          dataset.backgroundColor = gradientFill(token);
+          dataset.borderColor = colors[token];
+        } else {
+          dataset.backgroundColor =
+            dataset.label === "Radio songs" ? colors.success : colors.primary;
+          if (dataset.borderColor) dataset.borderColor = dataset.backgroundColor;
+        }
+      }
       instance.options.plugins.legend.labels.color = colors.text;
+      const tooltip = instance.options.plugins.tooltip;
+      if (tooltip) {
+        tooltip.backgroundColor = colors.raised;
+        tooltip.titleColor = tooltip.bodyColor = colors.foreground;
+        tooltip.borderColor = colors.grid;
+      }
       for (const scale of Object.values(instance.options.scales || {})) {
         if (scale.ticks) scale.ticks.color = colors.text;
-        if (scale.grid) scale.grid.color = colors.grid;
+        if (scale.grid) scale.grid.color = translucent(colors.grid, 0.35);
       }
       instance.stop?.();
       instance.update("none");

@@ -732,6 +732,19 @@ export function createWebServer(
       return res.status(502).json({ error: "Statistics are temporarily unavailable." });
     }
   });
+  app.get("/api/admin/statistics", (req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    if (!req.isAuthenticated() || !isDashboardUser(req.user)) return res.sendStatus(401);
+    if (req.user.id !== ADMIN_USER_ID) return res.sendStatus(403);
+    const ids = [...client.guilds.cache.keys()];
+    const active = ids.flatMap((id) => {
+      const state = getGuildPlayerState(id);
+      return state?.isLive && state.status === "playing" && state.liveSessionId
+        ? [state.liveSessionId]
+        : [];
+    });
+    return res.json(eventCharts(ids, Date.now(), active));
+  });
   app.get("/api/admin/guilds/:guildId/statistics", (req, res) => {
     res.set("Cache-Control", "private, no-store");
     if (!req.isAuthenticated() || !isDashboardUser(req.user)) return res.sendStatus(401);
@@ -843,6 +856,17 @@ export function createWebServer(
       infrastructure: await getInfrastructureMetrics(),
     });
   });
+  app.get("/admin/statistics", (req, res) => {
+    if (!req.isAuthenticated() || !isDashboardUser(req.user)) return res.redirect("/");
+    if (req.user.id !== ADMIN_USER_ID) return res.redirect("/dashboard");
+    res.set("Cache-Control", "private, no-store");
+    return res.render("admin-statistics", {
+      username: req.user.username,
+      avatarUrl: avatarUrlFor(req.user),
+      isAdmin: true,
+      statisticsTab: req.query.tab === "events" ? "events" : "overview",
+    });
+  });
   app.get("/admin/guild/:guildId", (req, res) => {
     if (!req.isAuthenticated() || !isDashboardUser(req.user)) return res.redirect("/");
     if (req.user.id !== ADMIN_USER_ID) return res.redirect("/dashboard");
@@ -855,6 +879,7 @@ export function createWebServer(
       isAdmin: true,
       guildId: guild.id,
       guildName: guild.name,
+      statisticsTab: req.query.tab === "events" ? "events" : "overview",
     });
   });
   app.get("/api/admin/guilds/:guildId/summary", async (req, res) => {

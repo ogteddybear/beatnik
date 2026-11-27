@@ -28,7 +28,7 @@
   function button(label, text, action, disabled) {
     const element = document.createElement("button");
     element.type = "button";
-    element.className = "btn btn-sm btn-outline-light";
+    element.className = "btn btn-sm btn-outline-secondary";
     element.textContent = text;
     element.setAttribute("aria-label", label);
     element.disabled = disabled;

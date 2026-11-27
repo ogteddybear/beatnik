@@ -22,7 +22,7 @@
   function button(text, action) {
     const element = document.createElement("button");
     element.type = "button";
-    element.className = "btn btn-sm btn-outline-light";
+    element.className = "btn btn-sm btn-outline-secondary";
     element.textContent = text;
     element.disabled = busy;
     element.addEventListener("click", action);

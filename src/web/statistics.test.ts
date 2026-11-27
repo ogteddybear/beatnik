@@ -118,8 +118,46 @@ test("radio and all-source charts identify stations without inflating queued pla
       Array.from(charts.get("distribution-chart")?.data.datasets[0].data ?? []),
       [3, 2],
     );
-    assert.match(tracks?.textContent ?? "", /Queued song · Queue/);
+    const queuedRow = [...(tracks?.children ?? [])].find(
+      (row) => row.querySelector(".statistics-ranked-title > span")?.textContent === "Queued song",
+    );
+    assert.equal(queuedRow?.querySelector("small")?.textContent, "Queue");
+    assert.equal(queuedRow?.querySelector(".statistics-count")?.textContent, "3");
     assert.match(tracks?.textContent ?? "", /TechnoBase.FM/);
+    assert.equal(tracks?.classList.contains("list-group"), true);
+    assert.equal(
+      window.document.querySelectorAll("#distribution-data .statistics-summary-metric").length,
+      2,
+    );
+    assert.deepEqual(
+      [...window.document.querySelectorAll("#distribution-data .tabular-nums")].map(
+        (value) => value.textContent,
+      ),
+      ["3", "2"],
+    );
+    assert.equal(
+      window.document
+        .querySelector("#statistics-table-caption")
+        ?.classList.contains("visually-hidden"),
+      true,
+    );
+    assert(window.document.querySelector("#statistics-columns")?.closest("thead.sticky-top"));
+    assert(
+      window.document
+        .querySelector("#statistics-data")
+        ?.closest("table")
+        ?.parentElement?.classList.contains("statistics-daily-scroll"),
+    );
+    assert(
+      [...window.document.querySelectorAll("#statistics-columns th")]
+        .slice(1)
+        .every((cell) => cell.classList.contains("text-end")),
+    );
+    assert(
+      [...window.document.querySelectorAll("#statistics-data tr:first-child td")]
+        .slice(1)
+        .every((cell) => cell.classList.contains("text-end")),
+    );
   } finally {
     window.close();
   }

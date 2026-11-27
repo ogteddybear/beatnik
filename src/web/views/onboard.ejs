@@ -6,9 +6,9 @@
   <%- include('navbar', { active: 'dashboard' }) %>
   <main class="container page-container">
     <h1 class="h2"><%= guildName %> · Server setup</h1>
-    <p>Only server managers and the bot owner can save setup. Changes apply to volume immediately; the Now Playing channel applies to new voice sessions.</p>
+    <p class="small text-body-secondary">Volume changes apply immediately. The text channel takes effect next voice session.</p>
     <form id="onboard-form" class="panel page-section">
-      <p id="wizard-progress" role="status" aria-live="polite">Step 1 of 4</p>
+      <p id="wizard-progress" class="small text-body-secondary tabular-nums" role="status" aria-live="polite">Step 1 of 4</p>
       <fieldset data-step="0"><legend class="h4">1. Default volume</legend>
         <label for="setup-volume" class="form-label">Volume: <output id="volume-output"><%= settings.volume %></output>%</label>
         <input id="setup-volume" class="form-range" type="range" min="0" max="200" step="1" value="<%= settings.volume %>" />
@@ -30,13 +30,13 @@
         <div class="form-check"><input id="setup-autoplay" class="form-check-input" type="checkbox" <%= settings.autoplay_enabled ? 'checked' : '' %> />
           <label for="setup-autoplay" class="form-check-label">Continue with related music when the queue finishes</label></div>
       </fieldset>
-      <div class="d-flex gap-2 mt-4">
-        <button id="wizard-back" class="btn btn-outline-light" type="button" disabled>Back</button>
+      <div class="d-flex flex-wrap justify-content-end gap-2 mt-4">
+        <button id="wizard-back" class="btn btn-outline-secondary" type="button" disabled>Back</button>
         <button id="wizard-next" class="btn btn-primary" type="button">Next</button>
         <button id="wizard-save" class="btn btn-primary" type="submit" hidden>Save setup</button>
       </div>
     </form>
-    <p id="wizard-status" role="status" aria-live="polite"></p>
+    <p id="wizard-status" class="status-text" role="status" aria-live="polite"></p>
     <a href="/dashboard/guilds/<%= encodeURIComponent(guildId) %>">Queue &amp; settings →</a>
   </main>
 </body></html>

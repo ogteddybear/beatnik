@@ -3,17 +3,20 @@
   <head>
     <%- include('head', { title: guildName + ' · Sashimi analytics', live: true }) %>
   </head>
-  <body class="min-vh-100" data-dashboard="detail" data-guild-id="<%= guildId %>">
+   <% const tab = typeof statisticsTab !== 'undefined' && statisticsTab === 'events' ? 'events' : 'overview'; %>
+   <body class="min-vh-100" data-dashboard="detail" data-guild-id="<%= guildId %>" data-statistics-tab="<%= tab %>">
     <%- include('navbar', { active: 'detail' }) %>
     <main class="container page-container">
       <a href="/admin" class="d-inline-block mb-3">← All servers</a>
       <h1 class="display-6 fw-bold"><%= guildName %></h1>
-      <p class="text-secondary page-description">Requests count tracks added to the queue; plays count playback starts. Errors count only recorded failures.</p>
       <p class="small text-secondary">Server ID: <span class="mono"><%= guildId %></span></p>
-      <p id="live-status" class="live-status" role="status" aria-live="polite" data-state="loading">Loading server activity…</p>
+      <%- include('statistics-nav', { tab, baseUrl: '/admin/guild/' + encodeURIComponent(guildId) }) %>
+      <% if (tab === 'overview') { %>
       <%- include('statistics', { statisticsUrl: '/api/admin/guilds/' + encodeURIComponent(guildId) + '/statistics' }) %>
-      <section aria-label="Server statistics" class="page-section panel">
-        <h2 class="h4 mb-4">Listening overview</h2>
+      <% } else { %>
+      <p id="live-status" class="live-status" role="status" aria-live="polite" data-state="loading">Loading server activity…</p>
+      <details class="page-section panel"><summary class="fw-semibold">Storage &amp; historical totals</summary>
+      <section aria-label="Server statistics" class="mt-4">
         <div class="table-responsive">
           <table class="table table-dark table-striped statistics-table">
             <thead><tr><th>Range</th><th>Plays</th><th>Requests</th><th>Library adds</th><th>Skips</th><th>Stops</th><th>Commands</th><th>Errors</th></tr></thead>
@@ -22,7 +25,7 @@
         </div>
         <p id="all-time" class="small text-secondary mt-4 mb-2 placeholder-glow"><span class="placeholder col-10" aria-hidden="true"></span></p>
         <p id="storage" class="small text-secondary mb-0 placeholder-glow"><span class="placeholder col-8" aria-hidden="true"></span></p>
-        <div id="storage-meter" hidden><%- include('storage-progress', { percentage: 0 }) %></div>
+        <div class="storage-meter-slot"><div id="storage-meter" hidden><%- include('storage-progress', { percentage: 0 }) %></div></div>
         <% if (isAdmin) { %>
         <form id="quota-settings" class="row g-2 align-items-end mt-3">
           <div class="col-12 col-sm-auto">
@@ -30,13 +33,14 @@
             <input class="form-control" id="max-storage-mb" name="max_storage_mb" type="number" min="0" step="any" required disabled aria-describedby="quota-help" />
           </div>
           <div class="col-12 col-sm-auto"><button class="btn btn-primary" type="submit" disabled>Save quota</button></div>
-          <p class="small text-secondary" id="quota-help">1 MB = 1,048,576 bytes. Zero disables new caching. Lowering the quota does not delete existing audio or interrupt streaming.</p>
+          <p class="small text-secondary" id="quota-help">Zero disables caching. Lowering the quota keeps existing audio and does not interrupt playback.</p>
           <p id="quota-status" role="status" aria-live="polite" class="small mb-0"></p>
         </form>
         <% } %>
       </section>
+      </details>
       <section aria-labelledby="activity-heading" class="page-section panel">
-        <h2 id="activity-heading" class="h4 mb-4">Recent activity</h2>
+        <h2 id="activity-heading" class="h4 mb-4">Event history</h2>
         <form id="activity-filters" class="row g-3 align-items-end mb-4" aria-describedby="filter-help">
           <div class="col-12 col-sm-6 col-lg-4 col-xl-2">
             <label class="form-label" for="range">Range</label>
@@ -73,7 +77,7 @@
             <label class="form-label" for="user">User ID</label>
             <input class="form-control" id="user" name="user" inputmode="numeric" maxlength="20" />
           </div>
-          <div class="col-12"><p class="small text-secondary" id="filter-help">Dates use UTC and apply to a custom range. Match an exact action or command name, or filter by Discord user ID.</p><button class="btn btn-primary" type="submit">Apply filters</button></div>
+           <div class="col-12"><p class="small text-secondary" id="filter-help">Custom dates use UTC. Action names must match exactly.</p><button class="btn btn-primary" type="submit">Apply filters</button></div>
         </form>
         <div class="table-responsive">
           <table class="table table-dark table-striped align-middle activity-table">
@@ -81,8 +85,9 @@
             <tbody id="activity-rows" class="placeholder-glow" aria-busy="true"><%- include('table-placeholders', { columns: 5 }) %></tbody>
           </table>
         </div>
-        <button id="load-older" class="btn btn-outline-light mt-4" type="button" hidden>Load older activity</button>
+        <button id="load-older" class="btn btn-outline-secondary mt-4" type="button" hidden>Load older activity</button>
       </section>
+      <% } %>
     </main>
   </body>
 </html>

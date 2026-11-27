@@ -25,9 +25,9 @@
     </div>
     <% if (isAdmin) { %>
       <p class="small text-secondary mt-3 mb-0" data-recent>Last 7 days: <%= guild.recent.plays %> plays · <%= guild.recent.adds %> library adds · <%= guild.recent.commands %> commands · <%= guild.recent.errors %> errors</p>
-      <a class="btn btn-outline-light mt-4 align-self-start" href="/admin/guild/<%= encodeURIComponent(guild.id) %>">View server analytics →</a>
+      <a class="btn btn-outline-secondary mt-4 align-self-start" href="/admin/guild/<%= encodeURIComponent(guild.id) %>">View server analytics →</a>
     <% } %>
-    <a class="btn btn-outline-light mt-3 align-self-start" href="/dashboard/guilds/<%= encodeURIComponent(guild.id) %>">Queue &amp; settings →</a>
-    <a class="btn btn-outline-light mt-2 align-self-start" href="/onboard/<%= encodeURIComponent(guild.id) %>">Server setup →</a>
+    <a class="btn btn-outline-secondary mt-3 align-self-start" href="/dashboard/guilds/<%= encodeURIComponent(guild.id) %>">Queue &amp; settings →</a>
+    <a class="btn btn-outline-secondary mt-2 align-self-start" href="/onboard/<%= encodeURIComponent(guild.id) %>">Server setup →</a>
   </article>
 </div>

@@ -12,7 +12,7 @@
         <p id="invite-message" class="text-secondary mb-4" role="status" aria-live="polite"><%= message %></p>
         <% if (typeof canCheck !== 'undefined' && canCheck) { %>
           <p id="invite-check-status" class="small text-secondary">Checking for confirmation automatically…</p>
-          <button id="invite-check" class="btn btn-outline-light mb-3" type="button">Check confirmation</button>
+          <button id="invite-check" class="btn btn-outline-secondary mb-3" type="button">Check confirmation</button>
         <% } %>
         <a class="btn btn-primary" href="<%= isAuthenticated ? '/dashboard' : '/' %>"><%= isAuthenticated ? 'View dashboard' : 'Return to Sashimi' %></a>
       </div>

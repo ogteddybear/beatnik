@@ -8,6 +8,7 @@ const locals = {
   username: "Listener",
   avatarUrl: "",
   isAdmin: true,
+  statisticsTab: "events",
   inviteUrl: "/invite",
   guilds: [],
   guildId: "123",

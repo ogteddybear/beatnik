@@ -20,6 +20,7 @@ const locals = {
   username: "Listener",
   avatarUrl: "",
   isAdmin: true,
+  statisticsTab: "events",
   inviteUrl: "/invite",
   guilds: [guild],
   guildId: "123",
@@ -93,7 +94,12 @@ for (const view of ["admin", "dashboard", "guild-detail"]) {
           null,
           "settled requests remove all skeletons",
         );
-        assert.equal(window.document.querySelector(".placeholder"), null);
+        assert.equal(
+          window.document.querySelector(
+            "#guild-list .placeholder, #activity-rows .placeholder, #range-stats .placeholder",
+          ),
+          null,
+        );
         if (failFirst) {
           const buttons = [...window.document.querySelectorAll<HTMLButtonElement>("button")].filter(
             (b) => b.textContent === "Try again",

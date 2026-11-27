@@ -9,6 +9,7 @@ test("activity renders recorded names, muted UID and safe download badges", asyn
     username: "Owner",
     avatarUrl: "",
     isAdmin: true,
+    statisticsTab: "events",
     guildId: "1",
     guildName: "Server",
   });

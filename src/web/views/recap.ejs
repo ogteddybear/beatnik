@@ -3,9 +3,11 @@
 <body><%- include('navbar', { active: 'recap' }) %>
 <main class="container page-container"><h1>Your 30-day recap</h1>
 <section class="panel page-section">
-<p>Playback starts attributed to your queued tracks: <strong><%= recap.plays %></strong></p>
-<p>Top track: <strong><%= recap.topTrack?.name ?? 'Not recorded yet' %></strong></p>
-<p>Top artist / channel: <strong><%= recap.topArtist?.name ?? 'Not recorded yet' %></strong></p>
-<p>Estimated total track playtime: <strong><%= Math.round((recap.durationSeconds ?? 0) / 60) %> minutes</strong></p>
-<p class="text-secondary">Duration metadata is available for <%= recap.measuredPlays %> of <%= recap.plays %> starts. This sums track durations, not actual listening time, and includes tracks that may have been skipped. Artist and duration snapshots begin with this release; older missing values are not invented. This is not a record of who was listening in voice.</p>
+<dl class="metric-grid">
+  <div><dt>Your queued plays</dt><dd><%= recap.plays %></dd></div>
+  <div><dt>Top track</dt><dd class="fs-6"><%= recap.topTrack?.name ?? 'No plays yet' %></dd></div>
+  <div><dt>Top artist / channel</dt><dd class="fs-6"><%= recap.topArtist?.name ?? 'Not recorded yet' %></dd></div>
+  <div><dt>Estimated track duration</dt><dd><%= Math.round((recap.durationSeconds ?? 0) / 60) %> <span class="fs-6 fw-normal text-body-secondary">min</span></dd></div>
+</dl>
+<p class="small text-body-secondary mt-4 mb-0">Based on <%= recap.measuredPlays %> of <%= recap.plays %> plays with known durations. Includes skipped tracks; not actual listening time.</p>
 </section></main></body></html>

@@ -3,9 +3,9 @@
   <head><%- include('head', { title: 'Sashimi · Spotify account', live: false }) %></head>
   <body class="min-vh-100">
     <main class="container page-container">
-      <section class="card dashboard-card p-4">
-        <h1 class="h3"><%= success ? 'Spotify Linked Successfully' : 'Spotify Account Linking' %></h1>
-        <p><%= message %></p>
+      <section class="card dashboard-card result-card mx-auto p-4 p-md-5">
+        <h1 class="h3"><%= success ? 'Spotify linked' : 'Link Spotify' %></h1>
+        <p class="text-body-secondary"><%= message %></p>
         <a class="btn btn-primary align-self-start" href="/dashboard">Return to dashboard</a>
       </section>
     </main>

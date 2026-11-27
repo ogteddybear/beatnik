@@ -2,6 +2,9 @@
   <h2 class="h4" id="now-playing-heading">Now Playing</h2>
   <p id="player-control-status" class="small text-secondary mb-2" role="status" aria-live="polite"></p>
   <div id="live-players" aria-live="polite">
-    <p class="text-secondary mb-0">Loading players…</p>
+    <div class="player-loading placeholder-glow" aria-hidden="true">
+      <span class="placeholder player-loading-art"></span>
+      <div class="player-loading-content"><span class="placeholder col-7 mb-2"></span><br /><span class="placeholder col-5 mb-3"></span><br /><span class="placeholder col-3 py-3 rounded"></span></div>
+    </div>
   </div>
 </section>

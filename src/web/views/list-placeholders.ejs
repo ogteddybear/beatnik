@@ -1,11 +1,13 @@
 <% for (let index = 0; index < Math.max(guilds.length, 2); index++) { %>
   <div class="col" data-skeleton aria-hidden="true">
-    <div class="dashboard-card server-card placeholder-glow p-4">
-      <div class="server-card-header"><div class="server-card-identity"><span class="placeholder rounded-circle w-100 h-100"></span></div><span class="placeholder col-7"></span></div>
+    <div class="card dashboard-card server-card h-100 placeholder-glow p-4">
+      <div class="server-card-header"><div class="server-card-identity"><span class="placeholder rounded-circle w-100 h-100"></span></div><div class="server-card-title col-7"><span class="placeholder w-100"></span></div></div>
       <div class="row row-cols-2 row-cols-md-3 g-3">
-        <% for (let metric = 0; metric < 6; metric++) { %><div class="col text-center"><p class="h5 mb-0"><span class="placeholder col-8"></span></p><p class="small mb-0"><span class="placeholder col-7"></span></p></div><% } %>
+        <% for (let metric = 0; metric < 6; metric++) { %><div class="col text-center"><p class="h5 mb-0"><span class="placeholder col-8"></span></p><p class="small mb-0"><span class="placeholder col-7"></span></p><% if (metric === 2) { %><small class="text-secondary"><span class="placeholder col-9"></span></small><div class="progress progress-thin mt-2"><span class="placeholder w-100"></span></div><% } %></div><% } %>
       </div>
-      <% if (admin) { %><p class="small mt-3 mb-0 pb-4"><span class="placeholder col-12"></span></p><span class="placeholder col-6 py-3 rounded"></span><% } %>
+      <% if (admin) { %><p class="small mt-3 mb-0" data-recent><span class="placeholder col-12"></span></p><span class="placeholder placeholder-action mt-4"></span><% } %>
+      <span class="placeholder placeholder-action mt-3"></span>
+      <span class="placeholder placeholder-action mt-2"></span>
     </div>
   </div>
 <% } %>

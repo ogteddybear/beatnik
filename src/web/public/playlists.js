@@ -41,9 +41,16 @@
         card.append(empty);
       }
       const form = document.createElement("form");
-      form.className = "d-flex gap-2 mt-3";
+      form.className = "d-flex gap-2 mt-3 responsive-action-form";
+      const field = document.createElement("div");
+      field.className = "flex-grow-1 w-100";
+      const label = document.createElement("label");
+      label.className = "form-label";
+      label.htmlFor = `playlist-track-url-${playlist.id}`;
+      label.textContent = "Track URL";
       const input = document.createElement("input");
       input.type = "url";
+      input.id = label.htmlFor;
       input.required = true;
       input.className = "form-control";
       input.placeholder = "Track URL";
@@ -52,7 +59,8 @@
       add.type = "submit";
       add.className = "btn btn-primary";
       add.textContent = "Add track";
-      form.append(input, add);
+      field.append(label, input);
+      form.append(field, add);
       form.addEventListener("submit", (event) => {
         event.preventDefault();
         void mutate(add, `/api/playlists/${playlist.id}/tracks`, "POST", { url: input.value });
@@ -67,7 +75,7 @@
       );
       card.prepend(title);
       const edit = document.createElement("a");
-      edit.className = "btn btn-outline-light mb-3";
+      edit.className = "btn btn-outline-secondary mb-3";
       edit.href = `/playlists/${playlist.id}`;
       edit.textContent = "Edit playlist";
       card.append(list, edit, form, remove);

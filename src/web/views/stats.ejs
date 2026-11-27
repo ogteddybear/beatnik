@@ -1,7 +1,14 @@
 <!doctype html><html lang="en" data-bs-theme="dark">
 <head><%- include('head', { title: 'Public stats · Sashimi', live: false }) %></head>
-<body><main class="container page-container"><h1>Sashimi · Public stats</h1>
-<section class="panel page-section"><p>Total servers: <strong><%= servers %></strong></p>
-<p>Tracks played (recorded starts): <strong><%= plays %></strong></p><p>Uptime: <strong><%= uptime %> seconds</strong></p></section>
-<a class="btn btn-primary" href="/dashboard">Dashboard</a><button type="button" class="btn btn-outline-light" data-theme-toggle>Switch theme</button>
+<body>
+<nav class="navbar" aria-label="Public navigation"><div class="container">
+  <a class="navbar-brand fw-bold" href="/dashboard"><span class="text-primary" aria-hidden="true">♫</span> Sashimi</a>
+  <div class="header-actions"><button type="button" class="btn btn-outline-secondary" data-theme-toggle>Switch theme</button><a class="btn btn-outline-secondary" href="/dashboard">Dashboard</a></div>
+</div></nav>
+<main class="container page-container"><h1>Public stats</h1>
+<section class="panel page-section" aria-label="Bot statistics"><dl class="metric-grid">
+  <div><dt>Total servers</dt><dd><%= servers %></dd></div>
+  <div><dt>Tracks played</dt><dd><%= plays %></dd></div>
+  <div><dt>Uptime</dt><dd><%= uptime %> <span class="fs-6 fw-normal text-body-secondary">seconds</span></dd></div>
+</dl></section>
 </main></body></html>

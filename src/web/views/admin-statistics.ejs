@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+  <head><%- include('head', { title: 'Statistics · Sashimi Admin', live: false }) %></head>
+  <body class="min-vh-100">
+    <%- include('navbar', { active: 'admin' }) %>
+    <main class="container page-container">
+      <header class="page-header">
+        <div><p class="text-primary text-uppercase fw-semibold eyebrow mb-2">Admin</p><h1 class="display-6 mb-0">Statistics</h1></div>
+        <div class="header-actions"><a class="btn btn-outline-secondary" href="/admin">Servers</a><a class="btn btn-outline-secondary" href="/api/admin/export/events">Export events</a></div>
+      </header>
+      <% const tab = typeof statisticsTab !== 'undefined' && statisticsTab === 'events' ? 'events' : 'overview'; %>
+      <%- include('statistics-nav', { tab, baseUrl: '/admin/statistics' }) %>
+      <% if (tab === 'overview') { %>
+        <%- include('statistics', { statisticsUrl: '/api/admin/statistics' }) %>
+      <% } else { %>
+        <%- include('event-search') %>
+      <% } %>
+    </main>
+  </body>
+</html>

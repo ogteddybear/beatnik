@@ -5,10 +5,11 @@ import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 
 test("owner search safely renders results, paginates and exposes errors", async () => {
-  const html = await ejs.renderFile("src/web/views/admin.ejs", {
+  const html = await ejs.renderFile("src/web/views/admin-statistics.ejs", {
     username: "Owner",
     avatarUrl: "",
     isAdmin: true,
+    statisticsTab: "events",
     guilds: [],
   });
   const dom = new JSDOM(html, { runScripts: "outside-only", url: "https://sashimi.example" });

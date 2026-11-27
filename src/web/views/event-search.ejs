@@ -1,0 +1,15 @@
+<section class="panel page-section" aria-labelledby="event-search-heading">
+  <h2 id="event-search-heading" class="h4">Event history</h2>
+  <form id="admin-search" class="d-flex gap-2 responsive-action-form">
+    <label class="visually-hidden" for="event-search-query">Username, track name or action</label>
+    <input id="event-search-query" class="form-control" type="search" maxlength="200" required placeholder="Username, track name or action…" />
+    <button class="btn btn-primary" type="submit">Search</button>
+  </form>
+  <p id="event-search-status" role="status" aria-live="polite" class="status-text">Search across all servers.</p>
+  <div class="table-responsive"><table class="table align-middle">
+    <thead><tr><th>Time (UTC)</th><th>Server</th><th>Username</th><th>Track</th><th>Type</th><th>Action</th></tr></thead>
+    <tbody id="event-search-results"></tbody>
+  </table></div>
+  <button id="event-search-more" class="btn btn-outline-secondary mt-3" type="button" hidden>Load more results</button>
+</section>
+<script src="/static/admin-search.js" defer></script>

@@ -8,10 +8,10 @@
     <%- include('navbar', { active: 'playlists' }) %>
     <main class="container page-container">
       <h1 class="display-6 fw-bold">Your playlists</h1>
-      <p class="text-secondary">Private to your Discord account. Play them with <code>/load custom name:</code> in a voice channel.</p>
+      <p class="small text-body-secondary">Private playlists. Play with <code>/load custom name:</code> in Discord.</p>
       <form id="create-playlist" class="d-flex gap-2 mb-4 responsive-action-form">
-        <label class="visually-hidden" for="playlist-name">Playlist name</label>
-        <input id="playlist-name" name="name" class="form-control" maxlength="100" placeholder="Playlist name" required />
+        <div class="flex-grow-1 w-100"><label class="form-label" for="playlist-name">Playlist name</label>
+        <input id="playlist-name" name="name" class="form-control" maxlength="100" placeholder="Late nights" required /></div>
         <button class="btn btn-primary" type="submit">Create playlist</button>
       </form>
       <p id="playlist-status" class="text-secondary" role="status" aria-live="polite">Loading playlists…</p>
