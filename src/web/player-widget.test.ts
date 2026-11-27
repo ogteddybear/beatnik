@@ -80,6 +80,14 @@ test("live player widget renders safe titles, progress, upcoming tracks, pauses 
     assert.equal(root.querySelectorAll("li").length, 5);
     assert.equal(root.querySelector<HTMLElement>(".progress-bar")?.style.width, "25%");
     assert(root.querySelector("img"));
+    const queuedImage = root.querySelector("img");
+    tick();
+    await flush();
+    assert.equal(
+      root.querySelector("img"),
+      queuedImage,
+      "queue progress refreshes preserve artwork too",
+    );
     root.querySelector<HTMLButtonElement>('[data-player-action="pause"]')?.click();
     assert.equal(root.querySelectorAll("button:disabled").length, 3);
     assert(root.querySelector(".spinner-border"));
@@ -131,6 +139,45 @@ test("live player widget renders safe titles, progress, upcoming tracks, pauses 
     );
     assert.equal(root.querySelector('[role="progressbar"]'), null);
     assert.equal(root.querySelector('[data-player-action="skip"]'), null);
+    let artworkWrites = 0;
+    const observer = new window.MutationObserver((records) => {
+      artworkWrites += records.filter((record) => record.type === "attributes").length;
+    });
+    observer.observe(root, { subtree: true, attributes: true, attributeFilter: ["src"] });
+    player.liveMetadata = { streamTitle: "Next radio song", title: "Next radio song" };
+    tick();
+    await flush();
+    assert.equal(
+      root.querySelector("img"),
+      stationImage,
+      "radio metadata updates must preserve the existing artwork node",
+    );
+    assert.match(root.querySelector("[data-live-metadata]")?.textContent ?? "", /Next radio song/);
+    tick();
+    await flush();
+    assert.equal(
+      root.querySelector("img"),
+      stationImage,
+      "unchanged dashboard polls must not recreate the radio artwork",
+    );
+    assert.equal(artworkWrites, 0, "unchanged artwork must not have its src reassigned");
+    player.status = "loading";
+    tick();
+    await flush();
+    assert.equal(root.querySelector("img"), stationImage, "reconnect status must preserve artwork");
+    assert.equal(artworkWrites, 0);
+    assert.match(root.textContent ?? "", /Connecting/);
+    player.status = "playing";
+    player.track.thumbnail = "https://www.housetime.fm/media/icons/ht/apple-touch-icon.png";
+    tick();
+    await flush();
+    assert.equal(root.querySelector("img"), stationImage);
+    assert.equal(artworkWrites, 1, "switching artwork updates src exactly once");
+    assert.equal(
+      new URL(stationImage.src).pathname,
+      `/api/image-proxy/${Buffer.from(player.track.thumbnail).toString("base64url")}`,
+    );
+    observer.disconnect();
     root.querySelector<HTMLButtonElement>('[data-player-action="stop"]')?.click();
     assert(root.querySelector(".spinner-border"));
     guild.player = null;

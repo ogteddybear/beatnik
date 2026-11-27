@@ -270,28 +270,46 @@
     playerGuilds = guilds;
     const root = document.getElementById("live-players");
     if (!root) return;
-    const content = document.createDocumentFragment();
+    const activeIds = new Set(guilds.filter((guild) => guild.player).map((guild) => guild.id));
+    for (const child of Array.from(root.children)) {
+      if (!activeIds.has(child.getAttribute("data-player-guild-id"))) child.remove();
+    }
+    const cards = new Map(
+      Array.from(root.children).map((card) => [card.getAttribute("data-player-guild-id"), card]),
+    );
+    let positionIndex = 0;
     for (const guild of guilds) {
       const state = guild.player;
       if (!state) continue;
-      const card = document.createElement("article");
+      const card = cards.get(guild.id) || document.createElement("article");
       card.className = "border-top pt-3 mt-3";
       card.dataset.playerGuildId = guild.id;
-      const header = document.createElement("div");
+      const header = card.querySelector("[data-player-header]") || document.createElement("div");
+      header.dataset.playerHeader = "";
       header.className = "d-flex align-items-center gap-3";
+      let thumbnail = header.querySelector("img");
       if (/^https?:\/\//i.test(state.track.thumbnail || "")) {
-        const thumbnail = document.createElement("img");
-        thumbnail.src = proxyImageUrl(state.track.thumbnail);
-        thumbnail.alt = "";
-        thumbnail.width = 64;
-        thumbnail.height = 64;
-        thumbnail.className = "rounded object-fit-cover";
-        thumbnail.addEventListener("error", () => {
-          thumbnail.hidden = true;
-        });
-        header.append(thumbnail);
-      }
-      const identity = document.createElement("div");
+        if (!thumbnail) {
+          thumbnail = document.createElement("img");
+          thumbnail.alt = "";
+          thumbnail.width = 64;
+          thumbnail.height = 64;
+          thumbnail.className = "rounded object-fit-cover";
+          thumbnail.addEventListener("error", (event) => {
+            event.currentTarget.hidden = true;
+          });
+          header.prepend(thumbnail);
+        }
+        const imageUrl = proxyImageUrl(state.track.thumbnail);
+        if (thumbnail.getAttribute("src") !== imageUrl) {
+          thumbnail.hidden = false;
+          thumbnail.src = imageUrl;
+        }
+      } else thumbnail?.remove();
+      const identity =
+        header.querySelector("[data-player-identity]") || document.createElement("div");
+      identity.dataset.playerIdentity = "";
+      identity.replaceChildren();
       const name = document.createElement("p");
       name.className = "small text-secondary mb-1";
       name.textContent = state.isLive
@@ -311,8 +329,12 @@
         metadata.textContent = `🎵 ${state.liveMetadata.streamTitle}`;
         identity.append(metadata);
       }
-      header.append(identity);
-      card.append(header);
+      if (identity.parentElement !== header) header.append(identity);
+      if (header.parentElement !== card) card.append(header);
+      const body = card.querySelector("[data-player-body]") || document.createElement("div");
+      body.dataset.playerBody = "";
+      body.replaceChildren();
+      if (body.parentElement !== card) card.append(body);
       const time = (seconds) => {
         const value = Math.max(0, Math.floor(seconds));
         return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, "0")}`;
@@ -332,7 +354,7 @@
       bar.className = "progress-bar bg-primary";
       bar.style.width = `${percent}%`;
       progress.append(bar);
-      if (!state.isLive) card.append(position, progress);
+      if (!state.isLive) body.append(position, progress);
       const controls = document.createElement("div");
       controls.className = "d-flex gap-2 mt-3";
       const pendingToggle = pendingControls.get(guild.id);
@@ -371,7 +393,7 @@
         button.addEventListener("click", () => void controlPlayer(guild.id, action, guild.name));
         controls.append(button);
       }
-      card.append(controls);
+      body.append(controls);
       const save = document.createElement("button");
       save.type = "button";
       save.hidden = !!state.isLive;
@@ -382,7 +404,7 @@
         : "Save Current Queue to Playlist";
       save.disabled = pendingSaves.has(guild.id);
       save.addEventListener("click", () => void saveQueuePlaylist(guild.id));
-      card.append(save);
+      body.append(save);
       if (state.nextTracks.length) {
         const label = document.createElement("p");
         label.className = "small text-secondary mt-3 mb-1";
@@ -394,17 +416,19 @@
           item.textContent = track.title;
           upcoming.append(item);
         }
-        card.append(label, upcoming);
+        body.append(label, upcoming);
       }
-      content.append(card);
+      if (root.children[positionIndex] !== card) {
+        root.insertBefore(card, root.children[positionIndex] || null);
+      }
+      positionIndex++;
     }
-    if (!content.childNodes.length) {
+    if (!activeIds.size) {
       const empty = document.createElement("p");
       empty.className = "text-secondary mb-0";
       empty.textContent = "Nothing is playing in your servers.";
-      content.append(empty);
+      root.replaceChildren(empty);
     }
-    root.replaceChildren(content);
   }
 
   async function controlPlayer(guildId, action, guildName) {
