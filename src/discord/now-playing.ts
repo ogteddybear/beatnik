@@ -26,7 +26,7 @@ export function nowPlayingPayload(state: PlayerState) {
           .setAuthor({ name: state.status === "loading" ? "🔴 LIVE · Connecting…" : "🔴 LIVE" })
           .setTitle(state.track.title.slice(0, 256))
           .setDescription(
-            `${escapeMarkdown(state.track.artist)}\nUse \`/stop\` to end the broadcast.`,
+            `${state.liveService ? `${escapeMarkdown(state.liveService)} · ` : ""}${escapeMarkdown(state.track.artist)}${state.liveMetadata ? `\n\n🎵 ${escapeMarkdown(state.liveMetadata.streamTitle.slice(0, 512))}` : ""}\nUse \`/stop\` to end the broadcast.`,
           ),
       ],
       components: [
@@ -100,10 +100,14 @@ export class NowPlayingPanel {
   private lastLiveEdit = 0;
   private lastLiveStation?: string;
   private lastLiveStatus?: PlayerState["status"];
+  private lastLiveState?: PlayerState;
   constructor(
-    private channel: PanelChannel,
+    private channel: PanelChannel | null,
     private player: CorePlayer,
-  ) {}
+    message?: PanelMessage,
+  ) {
+    this.message = message;
+  }
 
   isCurrentMessage(id: string): boolean {
     return !this.closed && this.message?.id === id;
@@ -115,6 +119,7 @@ export class NowPlayingPanel {
         if (this.closed) return;
         const state = this.player.getState();
         if (!state) return;
+        this.lastLiveState = state.isLive ? state : undefined;
         if (
           state.isLive &&
           this.message &&
@@ -137,7 +142,7 @@ export class NowPlayingPanel {
             this.message = undefined; // Deleted message: replace it once.
           }
         }
-        this.message = await this.channel.send(payload);
+        if (this.channel) this.message = await this.channel.send(payload);
       })
       .catch(() => {
         console.warn("Unable to update the Discord player panel.");
@@ -151,7 +156,11 @@ export class NowPlayingPanel {
       .then(async () => {
         if (this.message)
           await this.message.edit({
-            embeds: [new EmbedBuilder().setColor("#0a203b").setTitle("Playback ended")],
+            embeds: this.lastLiveState
+              ? nowPlayingPayload(this.lastLiveState).embeds.map((embed) =>
+                  embed.setAuthor({ name: "Broadcast ended" }),
+                )
+              : [new EmbedBuilder().setColor("#0a203b").setTitle("Playback ended")],
             components: [],
           });
       })

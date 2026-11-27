@@ -113,6 +113,17 @@ test("live player widget renders safe titles, progress, upcoming tracks, pauses 
     await flush();
     assert.match(root.textContent ?? "", /paused/);
     assert.match(root.textContent ?? "", /0:25 \/ 1:40/);
+    player.isLive = true;
+    player.liveMetadata = { streamTitle: "<script>ICY title</script>", title: "ICY title" };
+    tick();
+    await flush();
+    assert.equal(
+      root.querySelector("[data-live-metadata]")?.textContent,
+      "🎵 <script>ICY title</script>",
+    );
+    assert.equal(root.querySelector("script"), null);
+    assert.equal(root.querySelector('[role="progressbar"]'), null);
+    assert.equal(root.querySelector('[data-player-action="skip"]'), null);
     root.querySelector<HTMLButtonElement>('[data-player-action="stop"]')?.click();
     assert(root.querySelector(".spinner-border"));
     guild.player = null;

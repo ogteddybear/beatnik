@@ -295,7 +295,7 @@
       const name = document.createElement("p");
       name.className = "small text-secondary mb-1";
       name.textContent = state.isLive
-        ? `${guild.name} · 🔴 LIVE · ${state.status === "loading" ? "Connecting…" : state.status}`
+        ? `${guild.name} · 🔴 LIVE${state.liveService ? ` · ${state.liveService}` : ""} · ${state.status === "loading" ? "Connecting…" : state.status}`
         : `${guild.name} · ${state.status} · Loop: ${state.loopMode}`;
       const title = document.createElement("h3");
       title.className = "h5 mb-1";
@@ -304,6 +304,13 @@
       artist.className = "text-secondary mb-0";
       artist.textContent = state.track.artist;
       identity.append(name, title, artist);
+      if (state.isLive && state.liveMetadata?.streamTitle) {
+        const metadata = document.createElement("p");
+        metadata.dataset.liveMetadata = "";
+        metadata.className = "mt-2 mb-0";
+        metadata.textContent = `🎵 ${state.liveMetadata.streamTitle}`;
+        identity.append(metadata);
+      }
       header.append(identity);
       card.append(header);
       const time = (seconds) => {

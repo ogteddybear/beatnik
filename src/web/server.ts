@@ -71,6 +71,7 @@ const EVENT_TYPES = new Set([
   "library",
   "voice",
   "volume",
+  "live",
 ]);
 
 type InviteSession = session.Session & {

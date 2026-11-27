@@ -5,6 +5,8 @@ export interface LiveStation {
   metadataUrl?: string;
 }
 
+export const LIVE_SERVICE = "We aRe oNe";
+
 export const LIVE_STATIONS = {
   technobase: {
     name: "TechnoBase.FM",

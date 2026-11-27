@@ -1,12 +1,14 @@
 import { Readable } from "node:stream";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 
+import { type LiveMetadata, stripIcyMetadata } from "./metadata";
 import { LIVE_STATIONS, findLiveStation } from "./stations";
 
 interface LiveRequestOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
   fetcher?: typeof fetch;
+  onMetadata?: (metadata: LiveMetadata | null) => void;
 }
 
 const stationHosts = new Set(Object.values(LIVE_STATIONS).map(({ url }) => new URL(url).hostname));
@@ -42,7 +44,12 @@ async function requestLiveStream(stationUrl: string, options: LiveRequestOptions
       if (visited.has(current.href)) throw new Error("Live stream redirect loop.");
       visited.add(current.href);
       // Resolve headers first; the caller either cancels or consumes the final body.
-      const response = await fetcher(current.href, { method: "GET", redirect: "manual", signal });
+      const response = await fetcher(current.href, {
+        method: "GET",
+        redirect: "manual",
+        signal,
+        headers: { "Icy-MetaData": "1" },
+      });
       const location = response.headers.get("location");
       signal.throwIfAborted();
       if (redirectStatuses.has(response.status)) {
@@ -90,5 +97,12 @@ export async function openLiveStream(stationUrl: string, options: LiveRequestOpt
   // Guard the short handoff window before FFmpeg's pipeline installs listeners.
   stream.on("error", () => undefined);
   stream.once("close", result.close);
-  return { url: result.url, stream };
+  return {
+    url: result.url,
+    stream: stripIcyMetadata(
+      stream,
+      result.response.headers.get("icy-metaint"),
+      options.onMetadata,
+    ),
+  };
 }

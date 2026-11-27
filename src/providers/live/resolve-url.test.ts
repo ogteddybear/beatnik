@@ -52,6 +52,7 @@ test("resolves HTTP to HTTPS and relative redirects, cancelling every response b
     requests.push(String(input));
     assert.equal(options?.redirect, "manual");
     assert.equal(options?.method, "GET");
+    assert.equal(new Headers(options?.headers).get("icy-metadata"), "1");
     const body = new ReadableStream({
       cancel() {
         cancelled++;

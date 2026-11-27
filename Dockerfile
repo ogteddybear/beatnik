@@ -44,6 +44,7 @@ WORKDIR /app
 RUN mkdir -p library
 COPY tsdown.config.ts ./
 COPY tsconfig.json ./
+COPY THIRD_PARTY_NOTICES.md ./
 COPY src ./src
 RUN pnpm build
 
@@ -52,7 +53,7 @@ RUN pnpm prune --prod \
  && find node_modules -type f \( \
       -name "*.md" -o -name "*.map" -o -name "*.ts" \
       -o -name "CHANGELOG*" -o -name "README*" \
-      -o -name "LICENSE*" -o -name "*.test.js" \
+      -o -name "*.test.js" \
     \) -delete \
  && find node_modules -type d \( -name "test" -o -name "tests" -o -name "__tests__" \) \
       -exec rm -rf {} + 2>/dev/null; true \
@@ -72,6 +73,7 @@ COPY --from=app-builder /app/src/web/views ./src/web/views
 COPY --from=app-builder /app/src/web/public ./src/web/public
 COPY --from=app-builder /app/node_modules ./node_modules
 COPY --from=app-builder /app/package.json ./
+COPY --from=app-builder /app/THIRD_PARTY_NOTICES.md ./
 COPY --from=deps-builder /usr/local/bin/yt-dlp /usr/local/bin/yt-dlp
 COPY --from=deps-builder /usr/local/bin/deno /usr/local/bin/deno
 EXPOSE 8080

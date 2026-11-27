@@ -8,6 +8,7 @@ import { PassThrough, type Readable } from "node:stream";
 import { test } from "node:test";
 import { setImmediate as flush } from "node:timers/promises";
 
+import type { LiveStreamAttempt } from "../../core/player";
 import { LIVE_STATIONS } from "./stations";
 
 test("live command and player lifecycle", async (t) => {
@@ -20,6 +21,96 @@ test("live command and player lifecycle", async (t) => {
   const { CorePlayer } = await import("../../core/player");
   const { Queue } = await import("../../core/queue");
   try {
+    await t.test(
+      "live audit history tracks requester, songs, station switches and stops without finite plays",
+      async () => {
+        const { getLatestEvents, getGuildPlaybackHistory } =
+          await import("../../core/db/guild-events");
+        const { guildStats } = await import("../../core/db/guild-stats");
+        const player = new CorePlayer("live-audit", new Queue(), []);
+        let update: LiveStreamAttempt["onMetadata"];
+        player.onLiveStream = async (_url, _current, _disconnect, attempt) => {
+          attempt.onResolved?.("http://listener1.mp3.tb-group.fm/tb.mp3");
+          update = attempt.onMetadata;
+        };
+        await player.playLive(LIVE_STATIONS.technobase.url, LIVE_STATIONS.technobase.name, {
+          userId: "listener",
+          username: "Listener",
+        });
+        assert.ok(update);
+        update({ streamTitle: "Artist - First", artist: "Artist", title: "First" });
+        update({ streamTitle: "Artist - First", artist: "Artist", title: "First" });
+        update({ streamTitle: "Artist - Second", artist: "Artist", title: "Second" });
+        await player.playLive(LIVE_STATIONS.housetime.url, LIVE_STATIONS.housetime.name, {
+          userId: "other",
+          username: "Other",
+        });
+        await player.stop("admin");
+        const events = getLatestEvents(100).filter(
+          (event) => event.guild_id === "live-audit" && event.event_type === "live",
+        );
+        const starts = events.filter((event) => event.action === "start");
+        assert.equal(starts.length, 2);
+        assert.equal(events.filter((event) => event.action === "stream_resolved").length, 2);
+        const songs = events.filter((event) => event.action === "track_change");
+        assert.equal(songs.length, 2);
+        assert.equal(songs[0].track_name, "Artist - Second");
+        assert.equal(songs[0].user_id, "listener");
+        const details = JSON.parse(songs[0].metadata ?? "{}");
+        assert.equal(details.station, "TechnoBase.FM");
+        assert.equal(details.service, "We aRe oNe");
+        assert.equal(details.artist, "Artist");
+        assert.equal(details.title, "Second");
+        assert.equal(details.requestedBy, "listener");
+        assert.ok(details.elapsedSeconds >= 0);
+        const stops = events
+          .filter((event) => event.action === "stop")
+          .map((event) => JSON.parse(event.metadata ?? "{}"));
+        assert.equal(stops.length, 2);
+        assert.equal(stops[0].stoppedBy, "admin");
+        assert.equal(stops[1].reason, "station_switch");
+        assert.notEqual(
+          JSON.parse(starts[0].metadata ?? "{}").sessionId,
+          JSON.parse(starts[1].metadata ?? "{}").sessionId,
+        );
+        assert.equal(getGuildPlaybackHistory("live-audit").length, 0);
+        assert.equal(guildStats.get("live-audit").plays, 0);
+      },
+    );
+    await t.test(
+      "metadata updates are deduplicated and stale reconnect/stop callbacks are ignored",
+      async (ctx) => {
+        ctx.mock.timers.enable({ apis: ["setTimeout"] });
+        const player = new CorePlayer("live-metadata", new Queue(), []);
+        const callbacks: NonNullable<LiveStreamAttempt["onMetadata"]>[] = [];
+        let changes = 0;
+        player.onStateChange = () => {
+          changes++;
+        };
+        player.onLiveStream = async (_url, _current, _disconnected, attempt) => {
+          assert.ok(attempt.onMetadata);
+          callbacks.push(attempt.onMetadata);
+        };
+        await player.playLive(LIVE_STATIONS.technobase.url, LIVE_STATIONS.technobase.name);
+        const metadata = { streamTitle: "Artist - Track", artist: "Artist", title: "Track" };
+        callbacks[0](metadata);
+        assert.deepEqual(player.getState()?.liveMetadata, metadata);
+        const afterUpdate = changes;
+        callbacks[0](metadata);
+        assert.equal(changes, afterUpdate);
+        await player.finish(true);
+        assert.equal(player.getState()?.liveMetadata, null);
+        callbacks[0](metadata);
+        assert.equal(player.getState()?.liveMetadata, null);
+        ctx.mock.timers.tick(3_000);
+        await flush();
+        callbacks[1]({ streamTitle: "New title", title: "New title" });
+        assert.equal(player.getState()?.liveMetadata?.streamTitle, "New title");
+        await player.stop();
+        callbacks[1](metadata);
+        assert.equal(player.getState(), null);
+      },
+    );
     await t.test(
       "a silent live resource times out after ten seconds and is torn down",
       async (ctx) => {

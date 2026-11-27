@@ -33,11 +33,17 @@ export function createLiveStreamHandler(
     await audio.ready();
     if (audio.isDestroyed() || !isCurrent() || attempt.signal.aborted) return;
     audio.onStage?.("redirect");
-    const { stream: input } = await openStream(url, { signal: attempt.signal });
+    const { url: resolvedUrl, stream: input } = await openStream(url, {
+      signal: attempt.signal,
+      onMetadata: (metadata) => {
+        if (isCurrent() && !attempt.signal.aborted) attempt.onMetadata?.(metadata);
+      },
+    });
     if (audio.isDestroyed() || !isCurrent() || attempt.signal.aborted) {
       input.destroy();
       return;
     }
+    attempt.onResolved?.(resolvedUrl);
     let resource: AudioResource | undefined;
     try {
       // Node MP3 bytes -> FFmpeg stdin/PCM -> inline volume -> Opus.

@@ -1,8 +1,8 @@
 import { getOrCreateSession } from "@/core/manager";
 import { getOrCreateVoiceSession, getVoiceSession } from "@/discord/manager";
 import { requireVoiceChannel } from "@/discord/messaging";
-import { LIVE_STATIONS } from "@/providers/live/stations";
-import { EmbedBuilder } from "discord.js";
+import { LIVE_SERVICE, LIVE_STATIONS } from "@/providers/live/stations";
+import { EmbedBuilder, escapeMarkdown } from "discord.js";
 
 import type { CommandExecuter } from "..";
 
@@ -31,17 +31,28 @@ export const execute: CommandExecuter = async (interaction) => {
     username: interaction.user.username,
   });
   const accepted = await voice.runControl(async () => {
-    await player.playLive(station.url, station.name);
+    await voice.closeLiveReply();
+    await player.playLive(station.url, station.name, {
+      userId: interaction.user.id,
+      username: interaction.user.username,
+    });
+    const embed = new EmbedBuilder()
+      .setColor("#0a203b")
+      .setAuthor({ name: `${LIVE_SERVICE} · Live radio` })
+      .setDescription(
+        `📻 ${player.isLoading ? "Connecting to" : "Streaming"} **${station.name}** — ${station.genre}. Use \`/stop\` to end the broadcast.`,
+      );
+    const metadata = player.getState()?.liveMetadata;
+    if (metadata)
+      embed.addFields({
+        name: "On air",
+        value: escapeMarkdown(metadata.streamTitle).slice(0, 1024),
+      });
     await interaction.editReply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor("#0a203b")
-          .setDescription(
-            `📻 ${player.isLoading ? "Connecting to" : "Streaming"} **${station.name}** — ${station.genre}. Use \`/stop\` to end the broadcast.`,
-          ),
-      ],
+      embeds: [embed],
       allowedMentions: { parse: [] },
     });
+    voice.watchLiveReply(await interaction.fetchReply());
   });
   if (!accepted)
     await interaction.editReply("Another player action is in progress. Please try again.");

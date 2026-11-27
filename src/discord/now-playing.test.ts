@@ -4,7 +4,52 @@ import { test } from "node:test";
 
 import { NowPlayingPanel, nowPlayingPayload } from "./now-playing";
 
-test("live panel immediately reflects playback and reconnect transitions, but throttles unchanged refreshes", async () => {
+test("a seeded /live reply keeps service and songs updated and retains its final snapshot", async (ctx) => {
+  ctx.mock.timers.enable({ apis: ["Date"], now: Date.now() });
+  const state: PlayerState = {
+    isLive: true,
+    liveService: "We aRe oNe",
+    status: "playing",
+    track: {
+      id: "tb",
+      title: "TechnoBase.FM",
+      artist: "HandsUp",
+      thumbnail: "",
+      durationSeconds: 0,
+    },
+    progressSeconds: 0,
+    progressPercent: 0,
+    loopMode: "off",
+    nextTracks: [],
+    liveMetadata: { streamTitle: "First song", title: "First song" },
+  };
+  const edits: string[] = [];
+  const panel = new NowPlayingPanel(null, { getState: () => state } as CorePlayer, {
+    id: "command-reply",
+    async edit(payload) {
+      edits.push(JSON.stringify(payload));
+    },
+  });
+  await panel.refresh();
+  assert.equal(panel.isCurrentMessage("command-reply"), true);
+  assert.match(edits[0], /We aRe oNe/);
+  assert.match(edits[0], /TechnoBase.FM/);
+  assert.match(edits[0], /First song/);
+  state.liveMetadata = { streamTitle: "Second song", title: "Second song" };
+  await panel.refresh();
+  assert.equal(edits.length, 1);
+  ctx.mock.timers.tick(60_000);
+  await panel.refresh();
+  assert.match(edits[1], /Second song/);
+  await panel.close();
+  assert.match(edits[2], /Broadcast ended/);
+  assert.match(edits[2], /TechnoBase.FM/);
+  assert.match(edits[2], /Second song/);
+  assert.match(edits[2], /"components":\[\]/);
+});
+
+test("live panel immediately reflects playback and reconnect transitions, but throttles unchanged refreshes", async (ctx) => {
+  ctx.mock.timers.enable({ apis: ["Date"], now: Date.now() });
   const state: PlayerState = {
     isLive: true,
     status: "loading",
@@ -38,11 +83,19 @@ test("live panel immediately reflects playback and reconnect transitions, but th
   state.status = "playing";
   await panel.refresh();
   assert.equal(edits, 1, "Playing must immediately replace Connecting");
+  state.liveMetadata = { streamTitle: "Artist - Track", title: "Track", artist: "Artist" };
+  assert.match(nowPlayingPayload(state).embeds[0].toJSON().description ?? "", /Artist - Track/);
   await panel.refresh();
-  assert.equal(edits, 1, "Unchanged live refreshes must stay throttled");
+  assert.equal(edits, 1, "Metadata updates must not bypass the one-minute throttle");
+  ctx.mock.timers.tick(59_999);
+  await panel.refresh();
+  assert.equal(edits, 1);
+  ctx.mock.timers.tick(1);
+  await panel.refresh();
+  assert.equal(edits, 2, "Latest metadata can be displayed after one minute");
   state.status = "loading";
   await panel.refresh();
-  assert.equal(edits, 2, "A reconnect must immediately replace Playing");
+  assert.equal(edits, 3, "A reconnect must immediately replace Playing");
   await panel.close();
 });
 

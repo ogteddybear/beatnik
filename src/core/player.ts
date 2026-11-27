@@ -1,7 +1,9 @@
 import type { Provider, ProviderTrack } from "@/providers";
-import { type LiveStation, findLiveStation } from "@/providers/live/stations";
+import type { LiveMetadata } from "@/providers/live/metadata";
+import { LIVE_SERVICE, type LiveStation, findLiveStation } from "@/providers/live/stations";
 import { SpotifyPlaylistUnavailableError } from "@/providers/spotify/errors";
 import { log } from "@/shared";
+import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 
 import { findAutoplayTrack } from "./autoplay";
@@ -21,6 +23,8 @@ import {
 
 export interface PlayerState {
   isLive?: boolean;
+  liveMetadata?: LiveMetadata | null;
+  liveService?: string;
   status: "loading" | "paused" | "playing";
   track: { id: string; title: string; artist: string; thumbnail: string; durationSeconds: number };
   progressSeconds: number;
@@ -32,6 +36,8 @@ export interface PlayerState {
 export interface LiveStreamAttempt {
   signal: AbortSignal;
   onResourceCreated: () => void;
+  onMetadata?: (metadata: LiveMetadata | null) => void;
+  onResolved?: (url: string) => void;
 }
 
 export class CorePlayer {
@@ -49,6 +55,13 @@ export class CorePlayer {
   isLoading = false;
   isLive = false;
   private liveStation?: LiveStation;
+  private liveMetadata: LiveMetadata | null = null;
+  private liveContext?: {
+    sessionId: string;
+    startedAt: number;
+    userId?: string;
+    username?: string;
+  };
   private liveReconnectTimer?: ReturnType<typeof setTimeout>;
   private liveAttempt?: AbortController;
   private liveAttempts = 0;
@@ -57,7 +70,7 @@ export class CorePlayer {
   onLiveStream?: (
     url: string,
     isCurrent: () => boolean,
-    disconnected: () => void,
+    disconnected: (error?: Error) => void,
     attempt: LiveStreamAttempt,
   ) => Promise<void>;
   private generation = 0;
@@ -143,6 +156,8 @@ export class CorePlayer {
     if (this.isLive && this.liveStation) {
       return {
         isLive: true,
+        liveMetadata: this.liveMetadata,
+        liveService: LIVE_SERVICE,
         status: this.isLoading ? "loading" : "playing",
         track: {
           id: this.liveStation.url,
@@ -450,12 +465,12 @@ export class CorePlayer {
   }
 
   /** Switch audio without invoking onStop, which tears down the voice session. */
-  async playLive(url: string, stationName: string) {
+  async playLive(url: string, stationName: string, actor?: { userId: string; username?: string }) {
     const station = findLiveStation(url);
     if (!station || station.name !== stationName) throw new Error("Unknown live station.");
     if (!this.onLiveStream) throw new Error("No voice session available for live playback.");
     this.generation++;
-    this.clearLive();
+    this.clearLive("station_switch");
     this.isPlaying = false;
     this.isLoading = true;
     this.onResetAudio?.();
@@ -467,7 +482,9 @@ export class CorePlayer {
     this.isPaused = false;
     this.fromCache = null;
     this.liveStation = station;
+    this.liveContext = { sessionId: randomUUID(), startedAt: Date.now(), ...actor };
     this.isLive = true;
+    this.logLiveEvent("start");
     this.notifyStateChange();
     await this.connectLive();
   }
@@ -500,11 +517,27 @@ export class CorePlayer {
         onLiveStream(
           station.url,
           isCurrent,
-          () => {
-            if (isCurrent()) this.reconnectLive();
+          (error) => {
+            if (isCurrent()) {
+              if (error) this.logLiveEvent("stream_error", { error: error.message.slice(0, 500) });
+              this.reconnectLive();
+            }
           },
           {
             signal: controller.signal,
+            onResolved: (resolvedUrl) => {
+              if (isCurrent()) this.logLiveEvent("stream_resolved", { resolvedUrl });
+            },
+            onMetadata: (metadata) => {
+              if (!isCurrent() || this.liveMetadata?.streamTitle === metadata?.streamTitle) return;
+              const previousTitle = this.liveMetadata?.streamTitle ?? null;
+              this.liveMetadata = metadata;
+              this.logLiveEvent(metadata ? "track_change" : "metadata_clear", {
+                previousTitle,
+                ...metadata,
+              });
+              this.notifyStateChange();
+            },
             onResourceCreated: () => {
               if (!isCurrent() || controller.signal.aborted || timeout) return;
               timeout = setTimeout(() => controller.abort(), this.liveConnectionTimeoutMs);
@@ -518,9 +551,14 @@ export class CorePlayer {
       this.isPlaying = true;
       this.isLoading = false;
       connected = true;
+      this.logLiveEvent("connected");
       this.notifyStateChange();
     } catch (error) {
       if (isCurrent()) {
+        this.logLiveEvent("connection_failed", {
+          attempt: this.liveAttempts,
+          error: error instanceof Error ? error.message.slice(0, 500) : "Unknown error",
+        });
         log({
           level: "WARN",
           component: "CORE",
@@ -544,16 +582,19 @@ export class CorePlayer {
   private reconnectLive() {
     if (!this.isLive || this.liveReconnectTimer) return;
     if (this.liveAttempts >= 2) {
+      this.logLiveEvent("unavailable", { attempts: this.liveAttempts });
       const stationName = this.liveStation?.name;
       void this.stop();
       if (stationName) this.onLiveUnavailable?.(stationName);
       return;
     }
+    this.logLiveEvent("reconnect", { attempt: this.liveAttempts + 1 });
     // Invalidate callbacks from the failed resource before stopping it.
     this.generation++;
     this.liveAttempt?.abort();
     this.isPlaying = false;
     this.isLoading = true;
+    this.liveMetadata = null;
     this.onResetAudio?.();
     this.liveReconnectTimer = setTimeout(() => {
       this.liveReconnectTimer = undefined;
@@ -563,7 +604,30 @@ export class CorePlayer {
     this.notifyStateChange();
   }
 
-  private clearLive() {
+  private logLiveEvent(action: string, details: object = {}) {
+    if (!this.liveStation || !this.liveContext) return;
+    this.logPlayerEvent({
+      eventType: "live",
+      action,
+      userId: this.liveContext.userId,
+      username: this.liveContext.username,
+      trackName: this.liveMetadata?.streamTitle ?? this.liveStation.name,
+      metadata: {
+        service: LIVE_SERVICE,
+        station: this.liveStation.name,
+        stationUrl: this.liveStation.url,
+        genre: this.liveStation.genre,
+        sessionId: this.liveContext.sessionId,
+        requestedBy: this.liveContext.userId,
+        startedAt: this.liveContext.startedAt,
+        elapsedSeconds: Math.max(0, (Date.now() - this.liveContext.startedAt) / 1000),
+        ...details,
+      },
+    });
+  }
+
+  private clearLive(reason = "voice_departure", stoppedBy?: string | null) {
+    this.logLiveEvent("stop", { reason, stoppedBy });
     this.liveAttempt?.abort();
     this.liveAttempt = undefined;
     this.liveAttempts = 0;
@@ -571,11 +635,13 @@ export class CorePlayer {
     this.liveReconnectTimer = undefined;
     this.isLive = false;
     this.liveStation = undefined;
+    this.liveMetadata = null;
+    this.liveContext = undefined;
   }
 
   async stop(userId: string | null = null, username?: string) {
     this.generation++;
-    this.clearLive();
+    this.clearLive(userId ? "command" : "automatic", userId);
     if (this.queue.tracks.length || this.isPlaying) {
       this.logPlayerEvent({
         userId,

@@ -11,7 +11,7 @@ import {
   demuxProbe,
   entersState,
 } from "@discordjs/voice";
-import type { TextBasedChannel, VoiceBasedChannel } from "discord.js";
+import type { Message, TextBasedChannel, VoiceBasedChannel } from "discord.js";
 
 import { createVoiceConnection } from "./connection";
 import { createLiveStreamHandler } from "./live-audio";
@@ -50,6 +50,7 @@ export class VoiceSession {
   private resource?: AudioResource;
   private normalizationDb = 0;
   private panel?: NowPlayingPanel;
+  private liveReplyPanel?: NowPlayingPanel;
   private panelTimer?: ReturnType<typeof setInterval>;
   private destroyed = false;
   private controlBusy = false;
@@ -77,11 +78,15 @@ export class VoiceSession {
     });
     if (textChannel?.isSendable()) {
       this.panel = new NowPlayingPanel(textChannel, corePlayer);
-      this.panelTimer = setInterval(() => void this.panel?.refresh(), 15_000);
-      this.panelTimer.unref();
     }
+    this.panelTimer = setInterval(() => {
+      void this.panel?.refresh();
+      void this.liveReplyPanel?.refresh();
+    }, 15_000);
+    this.panelTimer.unref();
     corePlayer.onStateChange = () => {
       void this.panel?.refresh();
+      void this.liveReplyPanel?.refresh();
     };
     corePlayer.onPause = (paused) =>
       paused ? this.audioPlayer.pause() : this.audioPlayer.unpause();
@@ -238,6 +243,7 @@ export class VoiceSession {
     this.corePlayer.suspend();
     if (this.panelTimer) clearInterval(this.panelTimer);
     void this.panel?.close();
+    void this.closeLiveReply();
     this.audioPlayer.stop();
     this.resource?.playStream.destroy();
     this.subscription?.unsubscribe();
@@ -245,7 +251,22 @@ export class VoiceSession {
   }
 
   isCurrentMessage(messageId: string) {
-    return this.panel?.isCurrentMessage(messageId) ?? false;
+    return (
+      (this.panel?.isCurrentMessage(messageId) ?? false) ||
+      (this.liveReplyPanel?.isCurrentMessage(messageId) ?? false)
+    );
+  }
+
+  async closeLiveReply() {
+    const panel = this.liveReplyPanel;
+    this.liveReplyPanel = undefined;
+    await panel?.close();
+  }
+
+  watchLiveReply(message: Message) {
+    if (this.destroyed) return;
+    this.liveReplyPanel = new NowPlayingPanel(null, this.corePlayer, message);
+    void this.liveReplyPanel.refresh();
   }
 
   async runControl(action: () => Promise<void>): Promise<boolean> {
