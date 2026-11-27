@@ -1,3 +1,40 @@
+.statistics-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.statistics-toolbar h2 {
+  margin: 0;
+}
+.statistics-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 100%;
+}
+.statistics-controls .form-select {
+  width: auto;
+  min-width: 10rem;
+}
+.statistics-controls .btn {
+  white-space: nowrap;
+}
+#statistics-status:empty {
+  display: none;
+}
+@media (max-width: 575px) {
+  .statistics-controls {
+    width: 100%;
+  }
+  .statistics-controls .form-select {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
 :root,
 [data-bs-theme="dark"] {
   color-scheme: dark;

@@ -295,7 +295,7 @@
       const name = document.createElement("p");
       name.className = "small text-secondary mb-1";
       name.textContent = state.isLive
-        ? `${guild.name} · 🔴 LIVE${state.liveService ? ` · ${state.liveService}` : ""} · ${state.status === "loading" ? "Connecting…" : state.status}`
+        ? `${guild.name} · 🔴 LIVE · ${state.status === "loading" ? "Connecting…" : state.status}`
         : `${guild.name} · ${state.status} · Loop: ${state.loopMode}`;
       const title = document.createElement("h3");
       title.className = "h5 mb-1";

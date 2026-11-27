@@ -66,7 +66,12 @@ test("radio and all-source charts identify stations without inflating queued pla
           observations: 1,
         })),
         topArtists: [
-          { artist: "Cascada", station: "TechnoBase.FM", service: "We aRe oNe", observations: 1 },
+          {
+            artist: "Alex Megane x Timster & Ninth",
+            station: "TechnoBase.FM",
+            service: "We aRe oNe",
+            observations: 1,
+          },
         ],
       },
     });
@@ -76,6 +81,12 @@ test("radio and all-source charts identify stations without inflating queued pla
     const select = window.document.querySelector<HTMLSelectElement>("#statistics-source");
     assert.ok(select);
     assert.equal(select.value, "queue");
+    assert.ok(select.closest(".statistics-controls"));
+    assert.equal(window.document.getElementById("statistics-source-note"), null);
+    assert.doesNotMatch(
+      window.document.body.textContent ?? "",
+      /Neither proves|incomplete historical/,
+    );
     assert.equal(
       window.document.querySelector("#radio-statistics-details")?.hasAttribute("hidden"),
       true,
@@ -87,14 +98,19 @@ test("radio and all-source charts identify stations without inflating queued pla
     select.value = "radio";
     select.dispatchEvent(new window.Event("change"));
     const tracks = window.document.getElementById("top-tracks-data");
-    assert.match(tracks?.textContent ?? "", /TechnoBase.FM.*We aRe oNe/);
+    assert.match(tracks?.textContent ?? "", /on TechnoBase.FM/);
     assert.match(tracks?.textContent ?? "", /HouseTime.FM/);
     assert.equal(tracks?.querySelector("script"), null);
     assert.match(
       window.document.querySelector("#radio-statistics-summary")?.textContent ?? "",
-      /2.0 connected broadcast minutes/,
+      /2 min on air/,
     );
-    assert.equal(charts.get("plays-chart")?.data.datasets[0].label, "Radio songs observed");
+    assert.match(
+      window.document.getElementById("radio-artists-data")?.textContent ?? "",
+      /Alex Megane x Timster & Ninth on TechnoBase.FM/,
+    );
+    assert.doesNotMatch(window.document.body.textContent ?? "", /We aRe oNe/);
+    assert.equal(charts.get("plays-chart")?.data.datasets[0].label, "Radio songs");
     select.value = "all";
     select.dispatchEvent(new window.Event("change"));
     assert.equal(charts.get("plays-chart")?.data.datasets.length, 2);

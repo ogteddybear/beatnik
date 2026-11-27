@@ -53,7 +53,10 @@
                       ? {
                           callback: function (value) {
                             const label = this.getLabelForValue(value);
-                            return label.length > 18 ? label.slice(0, 17) + "…" : label;
+                            const station = this.chart?.data.datasets[0].stations?.[value];
+                            const title = station ? label.slice(0, -(station.length + 4)) : label;
+                            const short = title.length > 18 ? title.slice(0, 17) + "…" : title;
+                            return station ? [short, station] : short;
                           },
                         }
                       : {}),
@@ -138,10 +141,10 @@
           }))
         : source === "radio"
           ? radio.topTracks.map((track) => ({
-              label: `${track.title} · ${track.station} · ${track.service}`,
-              chartLabel: `${track.station}: ${track.title} · ${track.service}`,
+              label: `${track.title} on ${track.station}`,
+              station: track.station,
               count: track.observations,
-              unit: "songs observed",
+              unit: "songs tracked",
             }))
           : [
               ...(data.topPlays || []).map((track) => ({
@@ -151,10 +154,10 @@
                 unit: "queued plays",
               })),
               ...radio.topTracks.map((track) => ({
-                label: `${track.title} · ${track.station} · ${track.service}`,
-                chartLabel: `${track.station}: ${track.title} · ${track.service}`,
+                label: `${track.title} on ${track.station}`,
+                station: track.station,
                 count: track.observations,
-                unit: "songs observed",
+                unit: "songs tracked",
               })),
             ]
               .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
@@ -167,21 +170,20 @@
       top.append(item);
     }
     document.getElementById("radio-statistics-details").hidden = source === "queue";
+    document.getElementById("radio-statistics-breakdown").hidden = source === "queue";
     document.getElementById("radio-statistics-summary").textContent =
-      `${radio.totals.songsObserved} songs observed · ${radio.totals.sessions} radio sessions · ${(radio.totals.connectedSeconds / 60).toFixed(1)} connected broadcast minutes · ${radio.totals.reconnects} reconnects · ${radio.totals.errors} errors`;
+      `${radio.totals.songsObserved} songs tracked · ${radio.totals.sessions} sessions · ${Math.round(radio.totals.connectedSeconds / 60)} min on air`;
     for (const [id, labels] of [
       [
         "radio-stations-data",
         radio.stations.map(
-          (station) =>
-            `${station.station} · ${station.service}: ${station.songsObserved} songs observed · ${station.sessions} sessions · ${(station.connectedSeconds / 60).toFixed(1)} connected minutes`,
+          (station) => `${station.station}: ${station.songsObserved} songs tracked`,
         ),
       ],
       [
         "radio-artists-data",
         radio.topArtists.map(
-          (artist) =>
-            `${artist.artist} · ${artist.station} · ${artist.service}: ${artist.observations} songs observed`,
+          (artist) => `${artist.artist} on ${artist.station}: ${artist.observations} songs tracked`,
         ),
       ],
     ]) {
@@ -197,16 +199,8 @@
       source === "queue"
         ? ["Plays over time", "Top 10 requested tracks", "Commands / plays / skips"]
         : source === "radio"
-          ? [
-              "Radio songs observed over time",
-              "Top 10 radio titles · by station",
-              "Radio observations by station",
-            ]
-          : [
-              "Queued plays and radio songs observed",
-              "Top 10 titles · source labeled",
-              "Queue plays / radio observations",
-            ];
+          ? ["Radio songs over time", "Top 10 radio tracks", "Songs by station"]
+          : ["Queue and radio activity", "Top 10 tracks", "Queue and radio"];
     ["plays", "tracks", "distribution"].forEach((name, index) => {
       document.getElementById(`statistics-${name}-heading`).textContent = headings[index];
       document
@@ -218,8 +212,8 @@
       source === "queue"
         ? ["Commands", "Plays", "Skips"]
         : source === "radio"
-          ? radio.stations.map((station) => `${station.station} · ${station.service}`)
-          : ["Queued plays", "Radio songs observed"];
+          ? radio.stations.map((station) => station.station)
+          : ["Queued plays", "Radio songs"];
     const counts =
       source === "queue"
         ? [commands, plays, skips]
@@ -246,7 +240,7 @@
       });
     if (source !== "queue")
       datasets.push({
-        label: "Radio songs observed",
+        label: "Radio songs",
         data: data.days.map((day) => radioByDay.get(day.day)?.songsObserved || 0),
         borderColor: "#35b995",
         backgroundColor: "#35b995",
@@ -270,8 +264,9 @@
               source === "queue"
                 ? "Requests"
                 : source === "radio"
-                  ? "Songs observed"
-                  : "Queued plays / radio observations",
+                  ? "Songs tracked"
+                  : "Queued plays / radio songs",
+            stations: tracks.map((track) => track.station),
             data: tracks.map((track) => track.count),
             backgroundColor: "#5c9dff",
           },
@@ -289,7 +284,7 @@
     status.textContent =
       counts.some((count) => count > 0) ||
       (source !== "queue" && (radio.totals.sessions > 0 || radio.totals.connectedSeconds > 0))
-        ? "Statistics updated."
+        ? ""
         : "No activity recorded in this period.";
   }
   async function load() {

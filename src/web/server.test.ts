@@ -521,7 +521,7 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
         await request("/api/admin/guilds/managed/events?type=live", ownerCookie)
       ).json();
       assert.match(radioEvents.events[0].details, /TechnoBase.FM/);
-      assert.match(radioEvents.events[0].details, /We aRe oNe/);
+      assert.doesNotMatch(radioEvents.events[0].details, /We aRe oNe/);
       const summary = await request("/api/admin/guilds/managed/summary", ownerCookie);
       assert.equal((await summary.json()).ranges.week.commands, 1);
       assert.equal(

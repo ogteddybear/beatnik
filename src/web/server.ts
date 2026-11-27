@@ -231,6 +231,8 @@ function safeEventDetails(metadata: string | null): string {
       "loopMode",
     ] as const;
     const details = fields.flatMap((field) => {
+      if (field === "service" && typeof (value as Record<string, unknown>).station === "string")
+        return [];
       const entry = (value as Record<string, unknown>)[field];
       return (typeof entry === "string" && entry.length <= 128) ||
         (["count", "libraryRecordId", "percent", "previous", "removedCount"].includes(field) &&
