@@ -1,3 +1,4 @@
+import { LIVE_STATIONS } from "@/providers/live/stations";
 import type { Express } from "express";
 import ipaddr from "ipaddr.js";
 import { LRUCache } from "lru-cache";
@@ -5,6 +6,9 @@ import { lookup } from "node:dns/promises";
 import type { IncomingMessage } from "node:http";
 import https from "node:https";
 
+const RADIO_IMAGES = new Set<string>(
+  Object.values(LIVE_STATIONS).map((station) => station.artworkUrl),
+);
 const HOSTS = new Set([
   "cdn.discordapp.com",
   "media.discordapp.net",
@@ -41,7 +45,7 @@ export function validateImageUrl(raw: string): URL {
     const url = new URL(raw);
     if (
       url.protocol !== "https:" ||
-      !HOSTS.has(url.hostname) ||
+      (!HOSTS.has(url.hostname) && !RADIO_IMAGES.has(url.href)) ||
       url.username ||
       url.password ||
       url.port ||

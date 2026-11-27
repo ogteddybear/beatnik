@@ -213,6 +213,8 @@ function safeEventDetails(metadata: string | null): string {
     const value: unknown = JSON.parse(metadata);
     if (!value || typeof value !== "object" || Array.isArray(value)) return "—";
     const fields = [
+      "station",
+      "service",
       "trackId",
       "playlistId",
       "providerId",
@@ -234,7 +236,7 @@ function safeEventDetails(metadata: string | null): string {
         (["count", "libraryRecordId", "percent", "previous", "removedCount"].includes(field) &&
           typeof entry === "number" &&
           Number.isSafeInteger(entry))
-        ? [`${field}: ${entry}`]
+        ? [field === "station" || field === "service" ? `${entry}` : `${field}: ${entry}`]
         : [];
     });
     return details.join(" · ") || "—";
@@ -716,7 +718,14 @@ export function createWebServer(
     try {
       const guilds = await visibleGuilds(req);
       if (!guilds) return res.sendStatus(401);
-      return res.json(eventCharts(guilds.map((guild) => guild.id)));
+      const ids = guilds.map((guild) => guild.id);
+      const active = ids.flatMap((id) => {
+        const state = getGuildPlayerState(id);
+        return state?.isLive && state.status === "playing" && state.liveSessionId
+          ? [state.liveSessionId]
+          : [];
+      });
+      return res.json(eventCharts(ids, Date.now(), active));
     } catch {
       return res.status(502).json({ error: "Statistics are temporarily unavailable." });
     }
@@ -726,7 +735,12 @@ export function createWebServer(
     if (!req.isAuthenticated() || !isDashboardUser(req.user)) return res.sendStatus(401);
     if (req.user.id !== ADMIN_USER_ID) return res.sendStatus(403);
     if (!client.guilds.cache.has(req.params.guildId)) return res.sendStatus(404);
-    return res.json(eventCharts([req.params.guildId]));
+    const state = getGuildPlayerState(req.params.guildId);
+    const active =
+      state?.isLive && state.status === "playing" && state.liveSessionId
+        ? [state.liveSessionId]
+        : [];
+    return res.json(eventCharts([req.params.guildId], Date.now(), active));
   });
   app.get("/api/dashboard/guilds", async (req, res) => {
     res.set("Cache-Control", "private, no-store");

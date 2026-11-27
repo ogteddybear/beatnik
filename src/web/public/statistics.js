@@ -5,6 +5,8 @@
   const refresh = document.getElementById("refresh-statistics");
   let charts = [];
   let busy = false;
+  let lastData;
+  const sourceSelect = document.getElementById("statistics-source");
   function palette() {
     const style = getComputedStyle(document.documentElement);
     return {
@@ -65,6 +67,231 @@
       },
     });
   }
+  function render(data) {
+    const source = sourceSelect?.value || "queue";
+    const radio = data.radio || {
+      days: data.days.map((day) => ({
+        day: day.day,
+        songsObserved: 0,
+        sessions: 0,
+        connectedSeconds: 0,
+        errors: 0,
+        reconnects: 0,
+      })),
+      stations: [],
+      topTracks: [],
+      topArtists: [],
+      totals: { songsObserved: 0, sessions: 0, connectedSeconds: 0, errors: 0, reconnects: 0 },
+    };
+    const radioByDay = new Map(radio.days.map((day) => [day.day, day]));
+    const columns =
+      source === "radio"
+        ? ["Day", "Songs observed", "Sessions", "Connected minutes", "Errors", "Reconnects"]
+        : source === "all"
+          ? ["Day", "Queued plays", "Radio songs observed", "Queue errors", "Radio errors"]
+          : ["Day", "Plays", "Skips", "Errors", "Commands"];
+    const header = document.getElementById("statistics-columns");
+    header.replaceChildren();
+    for (const label of columns) {
+      const cell = document.createElement("th");
+      cell.scope = "col";
+      cell.textContent = label;
+      header.append(cell);
+    }
+    const rows = document.getElementById("statistics-data");
+    document.getElementById("statistics-table-caption").textContent =
+      source === "queue"
+        ? "Daily plays, skips, errors and commands (UTC)"
+        : source === "radio"
+          ? "Daily radio observations, session starts and connected time (UTC)"
+          : "Daily queue starts and radio observations, shown separately (UTC)";
+    rows.replaceChildren();
+    for (const day of data.days) {
+      const live = radioByDay.get(day.day);
+      const values =
+        source === "radio"
+          ? [
+              day.day,
+              live?.songsObserved || 0,
+              live?.sessions || 0,
+              ((live?.connectedSeconds || 0) / 60).toFixed(1),
+              live?.errors || 0,
+              live?.reconnects || 0,
+            ]
+          : source === "all"
+            ? [day.day, day.plays, live?.songsObserved || 0, day.errors, live?.errors || 0]
+            : [day.day, day.plays, day.skips, day.errors, day.commands];
+      const row = document.createElement("tr");
+      for (const value of values) {
+        const cell = document.createElement("td");
+        cell.textContent = value;
+        row.append(cell);
+      }
+      rows.append(row);
+    }
+    const tracks =
+      source === "queue"
+        ? data.topTracks.map((track) => ({
+            label: track.title,
+            count: track.requests,
+            unit: "requests",
+          }))
+        : source === "radio"
+          ? radio.topTracks.map((track) => ({
+              label: `${track.title} · ${track.station} · ${track.service}`,
+              chartLabel: `${track.station}: ${track.title} · ${track.service}`,
+              count: track.observations,
+              unit: "songs observed",
+            }))
+          : [
+              ...(data.topPlays || []).map((track) => ({
+                label: `${track.title} · Queue`,
+                chartLabel: `Queue: ${track.title}`,
+                count: track.plays,
+                unit: "queued plays",
+              })),
+              ...radio.topTracks.map((track) => ({
+                label: `${track.title} · ${track.station} · ${track.service}`,
+                chartLabel: `${track.station}: ${track.title} · ${track.service}`,
+                count: track.observations,
+                unit: "songs observed",
+              })),
+            ]
+              .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+              .slice(0, 10);
+    const top = document.getElementById("top-tracks-data");
+    top.replaceChildren();
+    for (const track of tracks) {
+      const item = document.createElement("li");
+      item.textContent = `${track.label}: ${track.count} ${track.unit}`;
+      top.append(item);
+    }
+    document.getElementById("radio-statistics-details").hidden = source === "queue";
+    document.getElementById("radio-statistics-summary").textContent =
+      `${radio.totals.songsObserved} songs observed · ${radio.totals.sessions} radio sessions · ${(radio.totals.connectedSeconds / 60).toFixed(1)} connected broadcast minutes · ${radio.totals.reconnects} reconnects · ${radio.totals.errors} errors`;
+    for (const [id, labels] of [
+      [
+        "radio-stations-data",
+        radio.stations.map(
+          (station) =>
+            `${station.station} · ${station.service}: ${station.songsObserved} songs observed · ${station.sessions} sessions · ${(station.connectedSeconds / 60).toFixed(1)} connected minutes`,
+        ),
+      ],
+      [
+        "radio-artists-data",
+        radio.topArtists.map(
+          (artist) =>
+            `${artist.artist} · ${artist.station} · ${artist.service}: ${artist.observations} songs observed`,
+        ),
+      ],
+    ]) {
+      const list = document.getElementById(id);
+      list.replaceChildren();
+      for (const label of labels.length ? labels : ["No radio activity recorded in this period."]) {
+        const item = document.createElement("li");
+        item.textContent = label;
+        list.append(item);
+      }
+    }
+    const headings =
+      source === "queue"
+        ? ["Plays over time", "Top 10 requested tracks", "Commands / plays / skips"]
+        : source === "radio"
+          ? [
+              "Radio songs observed over time",
+              "Top 10 radio titles · by station",
+              "Radio observations by station",
+            ]
+          : [
+              "Queued plays and radio songs observed",
+              "Top 10 titles · source labeled",
+              "Queue plays / radio observations",
+            ];
+    ["plays", "tracks", "distribution"].forEach((name, index) => {
+      document.getElementById(`statistics-${name}-heading`).textContent = headings[index];
+      document
+        .getElementById(`${name}-chart`)
+        .setAttribute("aria-label", `${headings[index]}; values are in the data below`);
+    });
+    const { commands, plays, skips } = data.distribution;
+    const labels =
+      source === "queue"
+        ? ["Commands", "Plays", "Skips"]
+        : source === "radio"
+          ? radio.stations.map((station) => `${station.station} · ${station.service}`)
+          : ["Queued plays", "Radio songs observed"];
+    const counts =
+      source === "queue"
+        ? [commands, plays, skips]
+        : source === "radio"
+          ? radio.stations.map((station) => station.songsObserved)
+          : [plays, radio.totals.songsObserved];
+    document.getElementById("distribution-data").textContent = labels
+      .map((label, index) => `${label}: ${counts[index]}`)
+      .join(" · ");
+    charts.forEach((instance) => instance.destroy());
+    charts = [];
+    if (!window.Chart) {
+      status.textContent =
+        "Charts could not load. Statistics are available under “View statistics data”.";
+      return;
+    }
+    const datasets = [];
+    if (source !== "radio")
+      datasets.push({
+        label: source === "queue" ? "Plays" : "Queued plays",
+        data: data.days.map((day) => day.plays),
+        borderColor: "#5c9dff",
+        backgroundColor: "#5c9dff",
+      });
+    if (source !== "queue")
+      datasets.push({
+        label: "Radio songs observed",
+        data: data.days.map((day) => radioByDay.get(day.day)?.songsObserved || 0),
+        borderColor: "#35b995",
+        backgroundColor: "#35b995",
+      });
+    charts.push(
+      chart(
+        "plays-chart",
+        "line",
+        data.days.map((day) => day.day),
+        datasets,
+      ),
+    );
+    charts.push(
+      chart(
+        "tracks-chart",
+        "bar",
+        tracks.map((track) => track.chartLabel || track.label),
+        [
+          {
+            label:
+              source === "queue"
+                ? "Requests"
+                : source === "radio"
+                  ? "Songs observed"
+                  : "Queued plays / radio observations",
+            data: tracks.map((track) => track.count),
+            backgroundColor: "#5c9dff",
+          },
+        ],
+      ),
+    );
+    charts.push(
+      chart("distribution-chart", "pie", labels, [
+        {
+          data: counts,
+          backgroundColor: ["#5c9dff", "#35b995", "#e4ad47", "#b085ef", "#e07d8d"],
+        },
+      ]),
+    );
+    status.textContent =
+      counts.some((count) => count > 0) ||
+      (source !== "queue" && (radio.totals.sessions > 0 || radio.totals.connectedSeconds > 0))
+        ? "Statistics updated."
+        : "No activity recorded in this period.";
+  }
   async function load() {
     if (busy) return;
     busy = true;
@@ -80,80 +307,8 @@
           `Statistics unavailable (${response.status}). Check your session and try again.`,
         );
       const data = await response.json();
-      const rows = document.getElementById("statistics-data");
-      rows.replaceChildren();
-      for (const day of data.days) {
-        const row = document.createElement("tr");
-        for (const value of [day.day, day.plays, day.skips, day.errors, day.commands]) {
-          const cell = document.createElement("td");
-          cell.textContent = value;
-          row.append(cell);
-        }
-        rows.append(row);
-      }
-      const top = document.getElementById("top-tracks-data");
-      top.replaceChildren();
-      for (const track of data.topTracks) {
-        const item = document.createElement("li");
-        item.textContent = `${track.title}: ${track.requests} requests`;
-        top.append(item);
-      }
-      const { commands, plays, skips } = data.distribution;
-      document.getElementById("distribution-data").textContent =
-        `Commands: ${commands} · Plays: ${plays} · Skips: ${skips}`;
-      charts.forEach((instance) => instance.destroy());
-      charts = [];
-      if (!window.Chart) {
-        status.textContent =
-          "Charts could not load. Statistics are available under “View statistics data”.";
-        return;
-      }
-      charts.push(
-        chart(
-          "plays-chart",
-          "line",
-          data.days.map((day) => day.day),
-          [
-            {
-              label: "Plays",
-              data: data.days.map((day) => day.plays),
-              borderColor: "#5c9dff",
-              backgroundColor: "#5c9dff",
-            },
-          ],
-        ),
-      );
-      charts.push(
-        chart(
-          "tracks-chart",
-          "bar",
-          data.topTracks.map((track) => track.title),
-          [
-            {
-              label: "Requests",
-              data: data.topTracks.map((track) => track.requests),
-              backgroundColor: "#5c9dff",
-            },
-          ],
-        ),
-      );
-      charts.push(
-        chart(
-          "distribution-chart",
-          "pie",
-          ["Commands", "Plays", "Skips"],
-          [
-            {
-              data: [commands, plays, skips],
-              backgroundColor: ["#5c9dff", "#35b995", "#e4ad47"],
-            },
-          ],
-        ),
-      );
-      status.textContent =
-        commands + plays + skips
-          ? "Statistics updated."
-          : "No commands, plays or skips recorded in this period.";
+      lastData = data;
+      render(data);
     } catch (error) {
       status.textContent = error.message;
     } finally {
@@ -162,6 +317,9 @@
     }
   }
   refresh.addEventListener("click", () => void load());
+  sourceSelect?.addEventListener("change", () => {
+    if (lastData) render(lastData);
+  });
   document.addEventListener("sashimi:theme", () => {
     const colors = palette();
     for (const instance of charts) {

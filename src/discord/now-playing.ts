@@ -25,6 +25,7 @@ export function nowPlayingPayload(state: PlayerState) {
           .setColor("#0a203b")
           .setAuthor({ name: state.status === "loading" ? "🔴 LIVE · Connecting…" : "🔴 LIVE" })
           .setTitle(state.track.title.slice(0, 256))
+          .setThumbnail(state.track.thumbnail ? proxyImageUrl(state.track.thumbnail) : null)
           .setDescription(
             `${state.liveService ? `${escapeMarkdown(state.liveService)} · ` : ""}${escapeMarkdown(state.track.artist)}${state.liveMetadata ? `\n\n🎵 ${escapeMarkdown(state.liveMetadata.streamTitle.slice(0, 512))}` : ""}\nUse \`/stop\` to end the broadcast.`,
           ),
@@ -168,5 +169,57 @@ export class NowPlayingPanel {
         console.warn("Unable to close the Discord player panel.");
       });
     return this.pending;
+  }
+}
+
+/** Owns the automatic panel and the interaction reply as one playback surface. */
+export class NowPlayingPanels {
+  private standard?: NowPlayingPanel;
+  private reply?: NowPlayingPanel;
+  private closed = false;
+  constructor(
+    private channel: (PanelChannel & { id: string }) | null,
+    private player: CorePlayer,
+  ) {
+    if (channel) this.standard = new NowPlayingPanel(channel, player);
+  }
+
+  async prepareLiveReply(channelId: string) {
+    if (this.closed) throw new Error("The voice session has ended. Run /live again.");
+    const previous = this.reply;
+    this.reply = undefined;
+    const suppressed = this.channel?.id === channelId ? this.standard : undefined;
+    if (this.channel?.id === channelId) this.standard = undefined;
+    else if (!this.standard && this.channel)
+      this.standard = new NowPlayingPanel(this.channel, this.player);
+    await Promise.all([previous?.close(), suppressed?.close()]);
+    if (this.closed) throw new Error("The voice session has ended. Run /live again.");
+  }
+
+  watchLiveReply(message: PanelMessage) {
+    const panel = new NowPlayingPanel(null, this.player, message);
+    if (this.closed) {
+      void panel.close();
+      return;
+    }
+    this.reply = panel;
+    void panel.refresh();
+  }
+
+  async refresh() {
+    if (!this.closed) await Promise.all([this.standard?.refresh(), this.reply?.refresh()]);
+  }
+
+  isCurrentMessage(id: string) {
+    return (
+      !this.closed &&
+      ((this.standard?.isCurrentMessage(id) ?? false) ||
+        (this.reply?.isCurrentMessage(id) ?? false))
+    );
+  }
+
+  async close() {
+    this.closed = true;
+    await Promise.all([this.standard?.close(), this.reply?.close()]);
   }
 }

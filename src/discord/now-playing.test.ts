@@ -2,7 +2,72 @@ import type { CorePlayer, PlayerState } from "@/core/player";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { NowPlayingPanel, nowPlayingPayload } from "./now-playing";
+import { NowPlayingPanel, NowPlayingPanels, nowPlayingPayload } from "./now-playing";
+
+test("/live uses only its command reply when the automatic panel channel is the same", async () => {
+  const state: PlayerState = {
+    isLive: true,
+    status: "playing",
+    track: {
+      id: "tb",
+      title: "TechnoBase.FM",
+      artist: "HandsUp",
+      thumbnail: "",
+      durationSeconds: 0,
+    },
+    progressSeconds: 0,
+    progressPercent: 0,
+    loopMode: "off",
+    nextTracks: [],
+  };
+  let sends = 0;
+  let edits = 0;
+  const panels = new NowPlayingPanels(
+    {
+      id: "commands",
+      async send() {
+        sends++;
+        return {
+          id: "automatic",
+          async edit() {
+            return undefined;
+          },
+        };
+      },
+    },
+    { getState: () => state } as CorePlayer,
+  );
+  await panels.prepareLiveReply("commands");
+  await panels.refresh();
+  panels.watchLiveReply({
+    id: "reply",
+    async edit() {
+      edits++;
+    },
+  });
+  await panels.refresh();
+  assert.equal(
+    sends,
+    0,
+    "a slash reply must not be duplicated by an automatic panel in the same channel",
+  );
+  assert.ok(edits);
+  assert.equal(panels.isCurrentMessage("reply"), true);
+  await panels.prepareLiveReply("other-channel");
+  panels.watchLiveReply({
+    id: "other-reply",
+    async edit() {
+      return undefined;
+    },
+  });
+  await panels.refresh();
+  assert.equal(sends, 1, "a separately configured Now Playing channel still receives its panel");
+  assert.equal(panels.isCurrentMessage("reply"), false);
+  assert.equal(panels.isCurrentMessage("automatic"), true);
+  assert.equal(panels.isCurrentMessage("other-reply"), true);
+  await panels.close();
+  assert.equal(panels.isCurrentMessage("automatic"), false);
+});
 
 test("a seeded /live reply keeps service and songs updated and retains its final snapshot", async (ctx) => {
   ctx.mock.timers.enable({ apis: ["Date"], now: Date.now() });

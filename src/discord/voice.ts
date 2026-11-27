@@ -16,7 +16,7 @@ import type { Message, TextBasedChannel, VoiceBasedChannel } from "discord.js";
 import { createVoiceConnection } from "./connection";
 import { createLiveStreamHandler } from "./live-audio";
 import { deleteVoiceSession } from "./manager";
-import { NowPlayingPanel } from "./now-playing";
+import { NowPlayingPanels } from "./now-playing";
 
 export function trackVoiceLifecycle(
   connection: { once(event: string, listener: () => void): unknown },
@@ -49,8 +49,7 @@ export class VoiceSession {
   private connection: VoiceConnection;
   private resource?: AudioResource;
   private normalizationDb = 0;
-  private panel?: NowPlayingPanel;
-  private liveReplyPanel?: NowPlayingPanel;
+  private panels: NowPlayingPanels;
   private panelTimer?: ReturnType<typeof setInterval>;
   private destroyed = false;
   private controlBusy = false;
@@ -66,6 +65,7 @@ export class VoiceSession {
     this.channelId = voiceChannel.id;
     this.guildId = voiceChannel.guildId;
     this.textChannel = textChannel;
+    this.panels = new NowPlayingPanels(textChannel?.isSendable() ? textChannel : null, corePlayer);
     this.connection = createVoiceConnection(voiceChannel);
     this.subscription = this.connection.subscribe(this.audioPlayer);
     trackVoiceLifecycle(this.connection, this.guildId, voiceChannel, actor);
@@ -76,17 +76,12 @@ export class VoiceSession {
         deleteSession(this.guildId);
       }
     });
-    if (textChannel?.isSendable()) {
-      this.panel = new NowPlayingPanel(textChannel, corePlayer);
-    }
     this.panelTimer = setInterval(() => {
-      void this.panel?.refresh();
-      void this.liveReplyPanel?.refresh();
+      void this.panels.refresh();
     }, 15_000);
     this.panelTimer.unref();
     corePlayer.onStateChange = () => {
-      void this.panel?.refresh();
-      void this.liveReplyPanel?.refresh();
+      void this.panels.refresh();
     };
     corePlayer.onPause = (paused) =>
       paused ? this.audioPlayer.pause() : this.audioPlayer.unpause();
@@ -242,8 +237,7 @@ export class VoiceSession {
     this.destroyed = true;
     this.corePlayer.suspend();
     if (this.panelTimer) clearInterval(this.panelTimer);
-    void this.panel?.close();
-    void this.closeLiveReply();
+    void this.panels.close();
     this.audioPlayer.stop();
     this.resource?.playStream.destroy();
     this.subscription?.unsubscribe();
@@ -251,22 +245,16 @@ export class VoiceSession {
   }
 
   isCurrentMessage(messageId: string) {
-    return (
-      (this.panel?.isCurrentMessage(messageId) ?? false) ||
-      (this.liveReplyPanel?.isCurrentMessage(messageId) ?? false)
-    );
+    return this.panels.isCurrentMessage(messageId);
   }
 
-  async closeLiveReply() {
-    const panel = this.liveReplyPanel;
-    this.liveReplyPanel = undefined;
-    await panel?.close();
+  async prepareLiveReply(channelId: string) {
+    await this.panels.prepareLiveReply(channelId);
+    if (this.destroyed) throw new Error("The voice session has ended. Run /live again.");
   }
 
   watchLiveReply(message: Message) {
-    if (this.destroyed) return;
-    this.liveReplyPanel = new NowPlayingPanel(null, this.corePlayer, message);
-    void this.liveReplyPanel.refresh();
+    this.panels.watchLiveReply(message);
   }
 
   async runControl(action: () => Promise<void>): Promise<boolean> {

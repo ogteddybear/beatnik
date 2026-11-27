@@ -2,6 +2,7 @@ import { getOrCreateSession } from "@/core/manager";
 import { getOrCreateVoiceSession, getVoiceSession } from "@/discord/manager";
 import { requireVoiceChannel } from "@/discord/messaging";
 import { LIVE_SERVICE, LIVE_STATIONS } from "@/providers/live/stations";
+import { proxyImageUrl } from "../../../utils/image-proxy";
 import { EmbedBuilder, escapeMarkdown } from "discord.js";
 
 import type { CommandExecuter } from "..";
@@ -31,7 +32,7 @@ export const execute: CommandExecuter = async (interaction) => {
     username: interaction.user.username,
   });
   const accepted = await voice.runControl(async () => {
-    await voice.closeLiveReply();
+    await voice.prepareLiveReply(interaction.channelId);
     await player.playLive(station.url, station.name, {
       userId: interaction.user.id,
       username: interaction.user.username,
@@ -39,6 +40,7 @@ export const execute: CommandExecuter = async (interaction) => {
     const embed = new EmbedBuilder()
       .setColor("#0a203b")
       .setAuthor({ name: `${LIVE_SERVICE} · Live radio` })
+      .setThumbnail(proxyImageUrl(station.artworkUrl))
       .setDescription(
         `📻 ${player.isLoading ? "Connecting to" : "Streaming"} **${station.name}** — ${station.genre}. Use \`/stop\` to end the broadcast.`,
       );

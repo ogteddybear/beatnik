@@ -326,6 +326,7 @@ test("live command and player lifecycle", async (t) => {
         assert.equal(queue.tracks.length, 0);
         assert.equal(queue.currentIndex, 0);
         assert.equal(player.getState()?.track.title, "TechnoBase.FM");
+        assert.equal(player.getState()?.track.thumbnail, LIVE_STATIONS.technobase.artworkUrl);
         assert.equal(player.getState()?.isLive, true);
         assert.equal(stops, 0, "switching to radio must preserve the voice session");
         assert.equal(resets, 1);
@@ -337,6 +338,10 @@ test("live command and player lifecycle", async (t) => {
         const state = player.getState();
         assert.ok(state);
         const payload = nowPlayingPayload(state);
+        assert.equal(
+          payload.embeds[0].toJSON().thumbnail?.url,
+          `https://dis.sashimi.zip/api/image-proxy/${Buffer.from(LIVE_STATIONS.technobase.artworkUrl).toString("base64url")}`,
+        );
         assert.equal(payload.components[0].components.length, 1);
         const stopButton = payload.components[0].components[0].data;
         assert.equal("custom_id" in stopButton ? stopButton.custom_id : undefined, "player:stop");

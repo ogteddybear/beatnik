@@ -114,6 +114,7 @@ test("live player widget renders safe titles, progress, upcoming tracks, pauses 
     assert.match(root.textContent ?? "", /paused/);
     assert.match(root.textContent ?? "", /0:25 \/ 1:40/);
     player.isLive = true;
+    player.track.thumbnail = "https://www.technobase.fm/media/icons/tb/apple-touch-icon.png";
     player.liveMetadata = { streamTitle: "<script>ICY title</script>", title: "ICY title" };
     tick();
     await flush();
@@ -122,6 +123,12 @@ test("live player widget renders safe titles, progress, upcoming tracks, pauses 
       "🎵 <script>ICY title</script>",
     );
     assert.equal(root.querySelector("script"), null);
+    const stationImage = root.querySelector<HTMLImageElement>("img");
+    assert.ok(stationImage);
+    assert.equal(
+      new URL(stationImage.src).pathname,
+      `/api/image-proxy/${Buffer.from(player.track.thumbnail).toString("base64url")}`,
+    );
     assert.equal(root.querySelector('[role="progressbar"]'), null);
     assert.equal(root.querySelector('[data-player-action="skip"]'), null);
     root.querySelector<HTMLButtonElement>('[data-player-action="stop"]')?.click();

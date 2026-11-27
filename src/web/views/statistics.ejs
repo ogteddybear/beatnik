@@ -1,19 +1,31 @@
 <section id="statistics" class="page-section panel" aria-labelledby="statistics-heading" data-statistics-url="<%= statisticsUrl %>">
   <h2 id="statistics-heading" class="h4">Statistics · Last 30 days</h2>
-  <p class="small text-secondary">UTC calendar days, including today. Requests are grouped by recorded track title; older requests without titles are excluded.</p>
+  <p class="small text-secondary">UTC calendar days, including today. Queued requests are grouped by recorded track title; radio titles are grouped by station. Older requests without titles are excluded.</p>
   <p id="statistics-status" role="status" aria-live="polite">Loading statistics…</p>
   <button id="refresh-statistics" class="btn btn-outline-light mb-3" type="button">Refresh statistics</button>
+  <label class="form-label ms-sm-3" for="statistics-source">Source</label>
+  <select id="statistics-source" class="form-select mb-3" aria-describedby="statistics-source-note">
+    <option value="queue">Queued playback</option>
+    <option value="radio">Radio activity</option>
+    <option value="all">All sources</option>
+  </select>
+  <p id="statistics-source-note" class="small text-secondary">Queue plays count starts; radio metadata counts songs observed. Neither proves completion or individual listening. Repeated titles across reconnects within a radio session are deduplicated. Session starts include failed attempts. Connected time measures the bot's stream connection, not audience listening time; incomplete historical connections are excluded.</p>
+  <div id="radio-statistics-details" hidden>
+    <p id="radio-statistics-summary"></p>
+    <h3 class="h6">Stations</h3><ul id="radio-stations-data"></ul>
+    <h3 class="h6">Top artists · station metadata</h3><ol id="radio-artists-data"></ol>
+  </div>
   <div class="row g-4">
-    <div class="col-12"><h3 class="h6">Plays over time</h3><div class="statistics-chart statistics-chart-line"><canvas id="plays-chart" role="img" aria-label="Plays over the last 30 days; values are in the data table below"></canvas></div></div>
-    <div class="col-12 col-lg-7"><h3 class="h6">Top 10 requested tracks</h3><div class="statistics-chart statistics-chart-tracks"><canvas id="tracks-chart" role="img" aria-label="Top requested tracks; values are listed below"></canvas></div></div>
-    <div class="col-12 col-lg-5"><h3 class="h6">Commands / plays / skips</h3><div class="statistics-chart"><canvas id="distribution-chart" role="img" aria-label="Commands, plays and skips distribution; totals are below"></canvas></div></div>
+    <div class="col-12"><h3 id="statistics-plays-heading" class="h6">Plays over time</h3><div class="statistics-chart statistics-chart-line"><canvas id="plays-chart" role="img" aria-label="Plays over the last 30 days; values are in the data table below"></canvas></div></div>
+    <div class="col-12 col-lg-7"><h3 id="statistics-tracks-heading" class="h6">Top 10 requested tracks</h3><div class="statistics-chart statistics-chart-tracks"><canvas id="tracks-chart" role="img" aria-label="Top requested tracks; values are listed below"></canvas></div></div>
+    <div class="col-12 col-lg-5"><h3 id="statistics-distribution-heading" class="h6">Commands / plays / skips</h3><div class="statistics-chart"><canvas id="distribution-chart" role="img" aria-label="Commands, plays and skips distribution; totals are below"></canvas></div></div>
   </div>
   <details class="mt-4"><summary>View statistics data</summary>
     <p id="distribution-data" class="mt-3"></p>
     <ol id="top-tracks-data"></ol>
     <div class="table-responsive"><table class="table table-striped">
-      <caption>Daily plays, skips, errors and commands (UTC)</caption>
-      <thead><tr><th scope="col">Day</th><th scope="col">Plays</th><th scope="col">Skips</th><th scope="col">Errors</th><th scope="col">Commands</th></tr></thead>
+      <caption id="statistics-table-caption">Daily plays, skips, errors and commands (UTC)</caption>
+      <thead><tr id="statistics-columns"><th scope="col">Day</th><th scope="col">Plays</th><th scope="col">Skips</th><th scope="col">Errors</th><th scope="col">Commands</th></tr></thead>
       <tbody id="statistics-data"></tbody>
     </table></div>
   </details>

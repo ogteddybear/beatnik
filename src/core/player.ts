@@ -25,6 +25,7 @@ export interface PlayerState {
   isLive?: boolean;
   liveMetadata?: LiveMetadata | null;
   liveService?: string;
+  liveSessionId?: string;
   status: "loading" | "paused" | "playing";
   track: { id: string; title: string; artist: string; thumbnail: string; durationSeconds: number };
   progressSeconds: number;
@@ -158,12 +159,13 @@ export class CorePlayer {
         isLive: true,
         liveMetadata: this.liveMetadata,
         liveService: LIVE_SERVICE,
+        liveSessionId: this.liveContext?.sessionId,
         status: this.isLoading ? "loading" : "playing",
         track: {
           id: this.liveStation.url,
           title: this.liveStation.name,
           artist: this.liveStation.genre,
-          thumbnail: "",
+          thumbnail: this.liveStation.artworkUrl,
           durationSeconds: 0,
         },
         progressSeconds: 0,

@@ -1,5 +1,6 @@
 import { db } from "./client";
 import { EVENT_HISTORY } from "./guild-events";
+import { radioCharts } from "./radio-charts";
 
 const DAY = 86_400_000;
 export interface ChartDay {
@@ -9,7 +10,11 @@ export interface ChartDay {
   errors: number;
   commands: number;
 }
-export function eventCharts(guildIds: string[], now = Date.now()) {
+export function eventCharts(
+  guildIds: string[],
+  now = Date.now(),
+  activeRadioSessionIds: string[] = [],
+) {
   // Thirty UTC calendar days, including today's partial day.
   const today = Math.floor(now / DAY) * DAY;
   const from = today - 29 * DAY;
@@ -59,5 +64,24 @@ export function eventCharts(guildIds: string[], now = Date.now()) {
     }),
     { commands: 0, plays: 0, skips: 0 },
   );
-  return { from, through, timezone: "UTC", days, topTracks, distribution };
+  const topPlays = db
+    .prepare<[string, number, number], { title: string; plays: number }>(
+      `
+    SELECT track_name AS title, count(*) AS plays FROM ${EVENT_HISTORY}
+    WHERE ${where} AND event_type = 'player' AND action = 'play'
+      AND track_name IS NOT NULL AND trim(track_name) <> ''
+    GROUP BY track_name ORDER BY plays DESC, title ASC LIMIT 10
+  `,
+    )
+    .all(scope, from, through);
+  return {
+    from,
+    through,
+    timezone: "UTC",
+    days,
+    topTracks,
+    distribution,
+    topPlays,
+    radio: radioCharts(guildIds, from, through, activeRadioSessionIds),
+  };
 }

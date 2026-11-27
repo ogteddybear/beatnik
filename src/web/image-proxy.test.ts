@@ -7,6 +7,7 @@ import https from "node:https";
 import { Readable } from "node:stream";
 import { test } from "node:test";
 
+import { LIVE_STATIONS } from "../providers/live/stations";
 import { proxyImageUrl } from "../utils/image-proxy";
 import {
   decodeImageUrl,
@@ -16,6 +17,21 @@ import {
   readImage,
   resolveImageAddress,
 } from "./image-proxy";
+
+test("radio artwork permits only the exact registered HTTPS icon URLs", () => {
+  const encoded = (url: string) => Buffer.from(url).toString("base64url");
+  for (const station of Object.values(LIVE_STATIONS)) {
+    assert.equal(decodeImageUrl(encoded(station.artworkUrl)).href, station.artworkUrl);
+    const origin = new URL(station.artworkUrl).origin;
+    for (const invalid of [
+      `${origin}/arbitrary.png`,
+      `${station.artworkUrl}?url=http://127.0.0.1/`,
+      station.artworkUrl.replace("https:", "http:"),
+      station.artworkUrl.replace(".fm/", ".fm.evil.example/"),
+    ])
+      assert.throws(() => decodeImageUrl(encoded(invalid)), { status: 400 });
+  }
+});
 
 test("image proxy rejects private/reserved IPs, mapped IPv6 and malformed URL encodings", async () => {
   for (const ip of [

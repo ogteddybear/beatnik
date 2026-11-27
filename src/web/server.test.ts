@@ -506,6 +506,22 @@ test("Discord OAuth uses the existing bot client ID when no dashboard override i
         (await onlyCommand.json()).events.map((event: { action: string }) => event.action),
         ["play"],
       );
+      logEvent({
+        guildId: "managed",
+        eventType: "live",
+        action: "track_change",
+        trackName: "Cascada - Ain't No Mountain High Enough",
+        metadata: {
+          station: "TechnoBase.FM",
+          service: "We aRe oNe",
+          streamTitle: "Cascada - Ain't No Mountain High Enough",
+        },
+      });
+      const radioEvents = await (
+        await request("/api/admin/guilds/managed/events?type=live", ownerCookie)
+      ).json();
+      assert.match(radioEvents.events[0].details, /TechnoBase.FM/);
+      assert.match(radioEvents.events[0].details, /We aRe oNe/);
       const summary = await request("/api/admin/guilds/managed/summary", ownerCookie);
       assert.equal((await summary.json()).ranges.week.commands, 1);
       assert.equal(
