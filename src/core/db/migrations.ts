@@ -33,6 +33,22 @@ export const spotifyUserSchema = `
   );
 `;
 
+export const tidalUserSchema = `
+  CREATE TABLE IF NOT EXISTS TidalUserTokens (
+    discord_user_id TEXT PRIMARY KEY,
+    access_token TEXT NOT NULL,
+    refresh_token TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    tidal_user_id TEXT,
+    tidal_display_name TEXT,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS TidalOAuthState (
+    state_hash TEXT PRIMARY KEY, discord_user_id TEXT NOT NULL,
+    session_id TEXT NOT NULL, expires_at INTEGER NOT NULL, consumed INTEGER NOT NULL DEFAULT 0
+  );
+`;
+
 interface Migration {
   name: string;
   up: (db: Database) => void;
@@ -195,6 +211,12 @@ const migrations: Migration[] = [
       db.exec(
         "CREATE TABLE IF NOT EXISTS BotSettings (id INTEGER PRIMARY KEY CHECK(id = 1), settings_json TEXT NOT NULL)",
       );
+    },
+  },
+  {
+    name: "012_tidal_user_tokens",
+    up: (db) => {
+      db.exec(tidalUserSchema);
     },
   },
 ];

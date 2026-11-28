@@ -8,6 +8,7 @@ import {
   ensureGuildEventColumns,
   runMigrations,
   spotifyUserSchema,
+  tidalUserSchema,
 } from "./migrations";
 
 const url = config.databaseUrl;
@@ -109,6 +110,7 @@ async function getDatabaseClient() {
   db.exec(tableInit);
   db.exec(applicationStateSchema);
   db.exec(spotifyUserSchema);
+  db.exec(tidalUserSchema);
   runMigrations(db);
   return db;
 }

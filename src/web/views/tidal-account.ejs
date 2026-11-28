@@ -1,0 +1,10 @@
+<section class="card dashboard-card p-4 mb-4" aria-labelledby="tidal-heading">
+  <h2 class="h4" id="tidal-heading">Tidal Account</h2>
+  <p id="tidal-account-status" class="text-secondary" role="status" aria-live="polite"><%= account?.linked ? 'Linked as ' + account.displayName : 'Link your account to access your personal Tidal playlists.' %></p>
+  <div class="d-flex gap-2 flex-wrap">
+    <a id="tidal-link" class="btn btn-outline-secondary" href="/auth/tidal" <%= account?.linked ? 'hidden' : '' %>>Link Tidal</a>
+    <a class="btn btn-outline-secondary" href="/auth/tidal">Reconnect Tidal</a>
+    <button id="tidal-unlink" class="btn btn-outline-danger" type="button" <%= account?.linked ? '' : 'hidden' %>>Unlink</button>
+  </div>
+</section>
+<script src="/static/tidal-account.js" defer></script>

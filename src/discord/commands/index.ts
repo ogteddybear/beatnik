@@ -19,6 +19,7 @@ import * as coach from "./special/coach/command";
 import * as spotify from "./spotify/command";
 import * as stop from "./stop/command";
 import * as storage from "./storage/command";
+import * as tidal from "./tidal/command";
 import * as volume from "./volume/command";
 
 interface Command {
@@ -37,6 +38,7 @@ export const commandList: CommandList = {
   autoplay,
   diagnostics,
   spotify,
+  tidal,
   lyrics,
   history,
   "library-remove": libraryRemove,

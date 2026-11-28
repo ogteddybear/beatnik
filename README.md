@@ -268,6 +268,48 @@ database file sizes and live/archive event counts, SoundCloud Client ID presence
 API connectivity check. Configured/present provider status is not a playback-health
 probe. CPU load averages are unavailable on Windows.
 
+### Personal Tidal accounts
+
+Set `TIDAL_CLIENT_ID` and `TIDAL_CLIENT_SECRET` from the Tidal developer dashboard.
+Register this exact redirect URI in your Tidal application:
+
+```text
+https://dis.sashimi.zip/auth/tidal/callback
+```
+
+`TIDAL_REDIRECT_URI` optionally overrides the callback; otherwise it uses the
+origin of `DISCORD_REDIRECT_URI`. `TIDAL_COUNTRY_CODE` defaults to `US` and must be
+an uppercase ISO two-letter country code suitable for your catalogue.
+Enable the `user.read playlists.read` scopes for your application. Account linking
+uses authorization code + S256 PKCE and Basic client authentication. Your app's
+Tidal access tier and approved scopes must permit user profiles and private playlists.
+
+Users must first sign into the Sashimi dashboard with Discord, then choose
+**Link Tidal** or run `/tidal link`. Click Link Tidal again if Discord login
+returned you to the dashboard. Each Discord user has separate tokens in the main
+SQLite database; back it up securely. Tokens never appear in dashboard responses.
+
+- `/tidal playlists page:1` lists owned playlists, ten per page, privately.
+- `/tidal load playlist:...` autocompletes the invoking user's owned playlists,
+  reads all track pages, searches YouTube by artist/title, and queues matches in
+  playlist order. Join a server voice channel first; YouTube must be enabled.
+  Unavailable tracks, videos, and searches with no result are skipped.
+- `/tidal unlink` or the dashboard Unlink button deletes local tokens and cancels
+  pending linking attempts; remove app consent in Tidal to revoke it there too.
+- Use **Reconnect Tidal** or `/tidal link` after consent revocation. Transient
+  Tidal outages do not delete stored credentials.
+
+The current [official OpenAPI](https://tidal-music.github.io/tidal-api-reference/)
+uses `/v2/users/me`, `/v2/playlists?filter[owners.id]=me`, and
+`/v2/playlists/{id}/relationships/items?include=items,items.tracks:artists`,
+not `/v2/users/me/playlists` or `/v2/playlists/{id}/items`. The client follows
+every JSON:API `links.next` cursor (string or link object), supplies `countryCode`
+on playlist/track pages, and parses ISO 8601 track durations into seconds.
+Requests have deadlines and reject untrusted pagination origins and cycles.
+This is metadata import via YouTube, not native Tidal audio streaming; matches
+are best-effort and large playlists take longer to resolve. Existing `/play`
+provider routing is unchanged.
+
 ### Personal Spotify accounts
 
 The web playlist list links to `/playlists/:id`, a private editor with rename,

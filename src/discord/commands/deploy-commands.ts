@@ -23,9 +23,10 @@ import { builder as coach } from "./special/coach/builder";
 import { builder as spotify } from "./spotify/builder";
 import { builder as stop } from "./stop/builder";
 import { builder as storage } from "./storage/builder";
+import { builder as tidal } from "./tidal/builder";
 import { builder as volume } from "./volume/builder";
 
-const COMMANDS_VERSION = "2.0.1";
+const COMMANDS_VERSION = "2.1.0";
 const versionFile = path.join(config.libraryPath, ".commands-version");
 
 async function shouldDeploy() {
@@ -69,6 +70,7 @@ export async function deployCommands() {
       history,
       lyrics,
       spotify,
+      tidal,
     ];
     const builderDefs = builders.map((b) => b.toJSON());
     const rest = new REST().setToken(token);

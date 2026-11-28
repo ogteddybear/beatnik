@@ -16,7 +16,10 @@
       </header>
       <p id="live-status" class="live-status mb-4" role="status" aria-live="polite" data-state="loading">Loading your servers…</p>
       <%- include('player-widget') %>
-      <%- include('spotify-account', { account: typeof spotifyAccount === 'undefined' ? null : spotifyAccount }) %>
+      <div class="row">
+        <div class="col-12 col-lg-6"><%- include('spotify-account', { account: typeof spotifyAccount === 'undefined' ? null : spotifyAccount }) %></div>
+        <div class="col-12 col-lg-6"><%- include('tidal-account', { account: typeof tidalAccount === 'undefined' ? null : tidalAccount }) %></div>
+      </div>
       <%- include('statistics', { statisticsUrl: '/api/dashboard/statistics' }) %>
 
       <section aria-labelledby="servers-heading">

@@ -14,6 +14,7 @@ import {
 import { MB, setGuildStorageLimit } from "@/core/db/guild-settings";
 import { guildStats } from "@/core/db/guild-stats";
 import { spotifyUsers } from "@/core/db/spotify-users";
+import { tidalUsers } from "@/core/db/tidal-users";
 import { userPlaylists } from "@/core/db/user-playlists";
 import { getGuildPlayerState, getSession } from "@/core/manager";
 import { getPlayerControlSession } from "@/discord/player-buttons";
@@ -46,6 +47,7 @@ import { getInfrastructureMetrics } from "./metrics";
 import { mountOnboarding } from "./onboarding";
 import { mountPlaylistEditor } from "./playlist-editor";
 import { mountSpotifyAuth } from "./spotify-auth";
+import { mountTidalAuth } from "./tidal-auth";
 
 interface DashboardUser {
   id: string;
@@ -324,6 +326,9 @@ export function createWebServer(
   mountSpotifyAuth(app, (req) =>
     req.isAuthenticated() && isDashboardUser(req.user) ? req.user.id : null,
   );
+  mountTidalAuth(app, (req) =>
+    req.isAuthenticated() && isDashboardUser(req.user) ? req.user.id : null,
+  );
 
   app.get("/", (req, res) => {
     if (req.isAuthenticated()) return res.redirect("/dashboard");
@@ -555,6 +560,7 @@ export function createWebServer(
       inviteUrl: "/invite",
       isAdmin: req.user.id === ADMIN_USER_ID,
       spotifyAccount: spotifyUsers.summary(req.user.id),
+      tidalAccount: tidalUsers.summary(req.user.id),
     });
   });
   app.get("/playlists", (req, res) => {

@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+  <head><%- include('head', { title: 'Sashimi · Tidal account', live: false }) %></head>
+  <body class="min-vh-100">
+    <main class="container page-container">
+      <section class="card dashboard-card result-card mx-auto p-4 p-md-5">
+        <h1 class="h3"><%= success ? 'Tidal linked' : 'Link Tidal' %></h1>
+        <p class="text-body-secondary"><%= message %></p>
+        <% if (!success) { %><a class="btn btn-primary align-self-start mb-2" href="/auth/tidal">Reconnect Tidal</a><% } %>
+        <a class="btn btn-outline-secondary align-self-start" href="/dashboard">Return to dashboard</a>
+      </section>
+    </main>
+  </body>
+</html>
